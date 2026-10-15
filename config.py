@@ -1,4 +1,4 @@
-from qt.core import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheckBox
+from qt.core import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheckBox, QLineEdit
 from calibre.utils.config import JSONConfig
 
 # Persistent config storage for the plugin
@@ -6,6 +6,8 @@ plugin_prefs = JSONConfig('plugins/epub3_pagelist')
 plugin_prefs.defaults['chars_per_page'] = 1850
 plugin_prefs.defaults['snap_to_paragraph'] = True
 plugin_prefs.defaults['overwrite_existing'] = True
+plugin_prefs.defaults['use_custom_column'] = False
+plugin_prefs.defaults['custom_column_name'] = ''
 
 class ConfigWidget(QWidget):
     """
@@ -40,6 +42,23 @@ class ConfigWidget(QWidget):
         self.overwrite_checkbox.setToolTip('Overwrite page-list if it already exists in the EPUB.')
         layout.addWidget(self.overwrite_checkbox)
 
+        # Custom column setting
+        self.custom_column_checkbox = QCheckBox('Use custom column for page count')
+        self.custom_column_checkbox.setChecked(plugin_prefs['use_custom_column'])
+        self.custom_column_checkbox.setToolTip('Enable to read page count from a custom column instead of auto-calculating.')
+        layout.addWidget(self.custom_column_checkbox)
+
+        # Custom column name setting
+        column_layout = QHBoxLayout()
+        self.column_label = QLabel('Custom column name:')
+        self.column_input = QLineEdit()
+        self.column_input.setText(plugin_prefs['custom_column_name'])
+        self.column_input.setPlaceholderText('e.g., #pages, #page_count')
+        self.column_input.setToolTip('Name of the custom column containing the page count (e.g., #pages)')
+        column_layout.addWidget(self.column_label)
+        column_layout.addWidget(self.column_input)
+        layout.addLayout(column_layout)
+
         layout.addStretch(1)
 
     def save_settings(self):
@@ -49,3 +68,5 @@ class ConfigWidget(QWidget):
         plugin_prefs['chars_per_page'] = self.cpp_spinbox.value()
         plugin_prefs['snap_to_paragraph'] = self.snap_checkbox.isChecked()
         plugin_prefs['overwrite_existing'] = self.overwrite_checkbox.isChecked()
+        plugin_prefs['use_custom_column'] = self.custom_column_checkbox.isChecked()
+        plugin_prefs['custom_column_name'] = self.column_input.text().strip()

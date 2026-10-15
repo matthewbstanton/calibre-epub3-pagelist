@@ -47,6 +47,7 @@ class EPUB3PageListAction(InterfaceAction):
         skipped_already_paginated = 0
         error_count = 0
         error_details = []
+        column_values = []
         
         # 3. For each selected book
         for book_id in selected_ids:
@@ -59,13 +60,13 @@ class EPUB3PageListAction(InterfaceAction):
                 
                 # b. Get the EPUB file path
                 epub_path = db.new_api.format_abspath(book_id, 'EPUB')
-                
+
                 if not epub_path:
                     # If absolute path is not available, use format to get a temp copy
                     temp_file_path = db.new_api.format(book_id, 'EPUB', as_path=True)
                     epub_path = temp_file_path
                     temp_file_used = True
-                    
+
                 if not epub_path:
                     continue
 
@@ -86,11 +87,17 @@ class EPUB3PageListAction(InterfaceAction):
                 
                 # e. Load config
                 overwrite = plugin_prefs['overwrite_existing']
+                target_pages = None
+                if plugin_prefs['use_custom_column']:
+                    column_name = '#' + plugin_prefs['custom_column_name'].strip().lstrip('#')
+                    target_pages = int(db.new_api.field_for(column_name, book_id))
+                    column_values.append(f"{db.new_api.field_for('title', book_id)}: {target_pages}")
+
                 config = PaginationConfig(
                     chars_per_page=plugin_prefs['chars_per_page'],
                     snap_to_paragraph=plugin_prefs['snap_to_paragraph']
                 )
-                
+
                 # Check if book already has page-list and overwrite is disabled
                 nav_builder = NavBuilder(container)
                 if not overwrite and nav_builder.has_existing_page_list():
@@ -104,25 +111,25 @@ class EPUB3PageListAction(InterfaceAction):
 
                 # g. Run Paginator
                 paginator = Paginator(container, config)
-                pages = paginator.paginate()
-                
+                pages = paginator.fit_to_page_count(target_pages) if target_pages else paginator.paginate()
+
                 if not pages:
                     continue
-                
+
                 # h. Inject page break markers
                 injector.inject_markers(pages)
-                
+
                 # i. Run NavBuilder
                 nav_builder.build_page_list(pages, overwrite=overwrite)
-                
+
                 # j. Commit changes
                 container.commit()
-                
+
                 # k. Save back to library if working with temp copy
                 if temp_file_used and temp_file_path:
                     with open(temp_file_path, 'rb') as f:
                         db.new_api.set_format(book_id, 'EPUB', f)
-                
+
                 processed_count += 1
                 
             except Exception as e:
@@ -138,6 +145,15 @@ class EPUB3PageListAction(InterfaceAction):
                         pass
         
         # 4. Show completion dialog
+        if column_values:
+            column_name = plugin_prefs['custom_column_name'].strip().lstrip('#')
+            info_dialog(
+                self.gui,
+                'Custom column values',
+                f"Values read from custom column '#{column_name}':\n\n" + '\n'.join(column_values),
+                show=True,
+            )
+
         if error_count > 0:
             error_dialog(
                 self.gui,

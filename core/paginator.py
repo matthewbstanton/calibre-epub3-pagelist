@@ -109,6 +109,32 @@ class Paginator:
 
         return page_breaks
 
+    def fit_to_page_count(self, target: int) -> list[PageBreak]:
+        """
+        Binary-search ``chars_per_page`` so that ``paginate()`` yields
+        ``target`` pages, or the closest count reachable (every section
+        starts a new page, so very low targets may not be attainable).
+        """
+        lo, hi = 1, 1_000_000
+        best_pages: list[PageBreak] | None = None
+        best_cpp = self.config.chars_per_page
+
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            self.config.chars_per_page = mid
+            pages = self.paginate()
+            if best_pages is None or abs(len(pages) - target) < abs(len(best_pages) - target):
+                best_pages, best_cpp = pages, mid
+            if len(pages) == target:
+                break
+            if len(pages) > target:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+
+        self.config.chars_per_page = best_cpp
+        return best_pages or []
+
     # ------------------------------------------------------------------
     # Document processing
     # ------------------------------------------------------------------
