@@ -6,7 +6,7 @@ class EPUB3PageListPlugin(InterfaceActionBase):
     description = 'Generates synthetic page-list navigation for EPUB3 files'
     supported_platforms = ['windows', 'osx', 'linux']
     author = 'Matthew Stanton'
-    version = (1, 0, 1)
+    version = (1, 0, 4)
     minimum_calibre_version = (6, 0, 0)
     actual_plugin = 'calibre_plugins.epub3_pagelist.action:EPUB3PageListAction'
 
