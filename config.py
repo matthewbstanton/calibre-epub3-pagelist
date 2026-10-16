@@ -3,7 +3,7 @@ from qt.core import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheck
 from calibre.utils.config import JSONConfig
 
 from calibre_plugins.epub3_pagelist.core.page_count import (
-    SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, PAGE_COUNT_SOURCES)
+    SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, SOURCE_AMAZON_ID, PAGE_COUNT_SOURCES)
 
 # Persistent config storage for the plugin
 plugin_prefs = JSONConfig('plugins/epub3_pagelist')
@@ -83,10 +83,17 @@ class ConfigWidget(QWidget):
                                         'identifier. Books without one, or whose page count can\'t be read, are skipped.')
         source_layout.addWidget(self.goodreads_radio)
 
+        # Amazon Id
+        self.amazon_radio = QRadioButton('Use Amazon Id')
+        self.amazon_radio.setToolTip('Fetch the page count from the book\'s Amazon product page, using the "amazon" '
+                                     'identifier (ASIN). Books without one, or whose page count can\'t be read, are skipped.')
+        source_layout.addWidget(self.amazon_radio)
+
         self.source_radios = {
             SOURCE_CHARS_PER_PAGE: self.cpp_radio,
             SOURCE_CUSTOM_COLUMN: self.custom_column_radio,
             SOURCE_GOODREADS_ID: self.goodreads_radio,
+            SOURCE_AMAZON_ID: self.amazon_radio,
         }
         for radio in self.source_radios.values():
             self.source_group.addButton(radio)

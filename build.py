@@ -21,7 +21,8 @@ PLUGIN_NAME = "epub3_pagelist.zip"
 INCLUDES = [
     "__init__.py",
     "config.py",
-    "main.py",
+    "action.py",
+    "fetcher.py",
     "utils.py",
     "plugin-import-name-epub3_pagelist.txt",
     "images",

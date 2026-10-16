@@ -12,33 +12,8 @@ from calibre_plugins.epub3_pagelist.config import plugin_prefs, get_page_count_s
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.page_count import FetchResult, create_page_count_source
-
-# Seconds to wait for a web page before giving up on that book
-FETCH_TIMEOUT = 30
-
-def fetch_url(url):
-    """
-    Fetch a URL with calibre's browser and return a FetchResult.
-    Used by page count sources that read a web page, such as Goodreads.
-    """
-    from calibre import browser
-    from calibre.utils.random_ua import random_common_chrome_user_agent
-    # Same browser identity calibre's metadata sources and the Count Pages plugin use
-    user_agent = random_common_chrome_user_agent()
-    try:
-        response = browser(user_agent=user_agent).open_novisit(url, timeout=FETCH_TIMEOUT)
-        return FetchResult(user_agent=user_agent, status=getattr(response, 'code', None),
-                           headers=str(response.info()), body=response.read())
-    except Exception as e:
-        # HTTP errors carry their own status, headers and body
-        info = getattr(e, 'info', None)
-        try:
-            body = e.read() if callable(getattr(e, 'read', None)) else None
-        except Exception:
-            body = None
-        return FetchResult(user_agent=user_agent, status=getattr(e, 'code', None),
-                           headers=str(info()) if callable(info) else None, body=body, error=e)
+from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
+from calibre_plugins.epub3_pagelist.fetcher import CalibreFetcher
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -88,7 +63,7 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
-        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, fetch_url)
+        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
 
         db = self.gui.current_db
         processed_count = 0
@@ -98,6 +73,7 @@ class EPUB3PageListAction(InterfaceAction):
         error_details = []
         skipped_no_page_count = []
         skipped_details = []
+        page_counts = []
 
         # 3. For each selected book
         for book_id in selected_ids:
@@ -185,6 +161,11 @@ class EPUB3PageListAction(InterfaceAction):
                         db.new_api.set_format(book_id, 'EPUB', f)
 
                 processed_count += 1
+                title = db.new_api.field_for('title', book_id)
+                if target_pages and target_pages != len(pages):
+                    page_counts.append(f'{title}: {len(pages)} pages (target {target_pages})')
+                else:
+                    page_counts.append(f'{title}: {len(pages)} pages')
                 
             except Exception as e:
                 error_count += 1
@@ -208,8 +189,12 @@ class EPUB3PageListAction(InterfaceAction):
             page_count_note = (f'Skipped {len(skipped_no_page_count)} book(s) with no page count:\n'
                                + '\n'.join(f'    {n}' for n in skipped_no_page_count))
 
+        page_counts_note = '\n'.join(f'    {c}' for c in page_counts)
+
         if error_count > 0:
             msg = f'Encountered errors on {error_count} book(s). Click "Show details" for the full traceback.'
+            if page_counts:
+                msg += f'\n\nGenerated page list for {processed_count} book(s):\n' + page_counts_note
             if page_count_note:
                 msg += '\n\n' + page_count_note
             error_dialog(
@@ -228,6 +213,8 @@ class EPUB3PageListAction(InterfaceAction):
             if page_count_note:
                 notes.append(page_count_note)
             msg = f'Successfully generated page list for {processed_count} book(s).'
+            if page_counts:
+                msg += '\n' + page_counts_note
             if notes:
                 msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
             if skipped_details:
