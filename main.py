@@ -20,7 +20,7 @@ FETCH_TIMEOUT = 30
 def fetch_url(url):
     """
     Fetch a URL with calibre's browser and return a FetchResult.
-    Used by page count sources that read a web page, such as Goodreads.
+    Used by page count sources that read a web page, such as Goodreads and Amazon.
     """
     from calibre import browser
     from calibre.utils.random_ua import random_common_chrome_user_agent
