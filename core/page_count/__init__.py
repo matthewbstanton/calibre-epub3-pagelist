@@ -1,7 +1,7 @@
 """
 Page count sources: where each book's target page count comes from.
 
-Every source implements PageCountSource.get_page_count(). main.py creates the
+Every source implements PageCountSource.get_page_count(). action.py creates the
 selected source once per run with create_page_count_source() and asks it for
 each book's page count, so the batch loop doesn't need to know which source
 is in use.

@@ -24,7 +24,7 @@ You are an autonomous developer on the EPUB3 Page List Generator Calibre plugin.
 ## Implementing
 
 - Keep the change to what the task asks for. Note unrelated problems in your report instead of fixing them.
-- Match the surrounding code: naming, comment density, and the docstring style in `core/` and `main.py`.
+- Match the surrounding code: naming, comment density, and the docstring style in `core/` and `action.py`.
 - `core/` stays free of Calibre and Qt imports. Calibre-side code imports through `calibre_plugins.epub3_pagelist.*`, and Qt through `qt.core`.
 - Add or update tests in `tests/` for any `core/` behaviour you change. Tests use the mock Polish container and must run without Calibre.
 - When you add a file that should ship, add it to `INCLUDES` in `build.py`.
@@ -38,7 +38,7 @@ Run all of these and fix any failures before you commit:
 2. `python3 -m py_compile` on every Python file you changed.
 3. `python3 build.py`. Never run `--install`, and never launch Calibre.
 
-Code in `main.py`, `config.py` and `utils.py` can't be exercised without Calibre. Say plainly which behaviour is still unverified and give manual test steps for it.
+Code in `action.py`, `config.py` and `utils.py` can't be exercised without Calibre. Say plainly which behaviour is still unverified and give manual test steps for it.
 
 ## Finishing
 

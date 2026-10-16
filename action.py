@@ -12,33 +12,8 @@ from calibre_plugins.epub3_pagelist.config import plugin_prefs, get_page_count_s
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.page_count import FetchResult, create_page_count_source
-
-# Seconds to wait for a web page before giving up on that book
-FETCH_TIMEOUT = 30
-
-def fetch_url(url):
-    """
-    Fetch a URL with calibre's browser and return a FetchResult.
-    Used by page count sources that read a web page, such as Goodreads and Amazon.
-    """
-    from calibre import browser
-    from calibre.utils.random_ua import random_common_chrome_user_agent
-    # Same browser identity calibre's metadata sources and the Count Pages plugin use
-    user_agent = random_common_chrome_user_agent()
-    try:
-        response = browser(user_agent=user_agent).open_novisit(url, timeout=FETCH_TIMEOUT)
-        return FetchResult(user_agent=user_agent, status=getattr(response, 'code', None),
-                           headers=str(response.info()), body=response.read())
-    except Exception as e:
-        # HTTP errors carry their own status, headers and body
-        info = getattr(e, 'info', None)
-        try:
-            body = e.read() if callable(getattr(e, 'read', None)) else None
-        except Exception:
-            body = None
-        return FetchResult(user_agent=user_agent, status=getattr(e, 'code', None),
-                           headers=str(info()) if callable(info) else None, body=body, error=e)
+from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
+from calibre_plugins.epub3_pagelist.fetcher import CalibreFetcher
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -88,7 +63,7 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
-        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, fetch_url)
+        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
 
         db = self.gui.current_db
         processed_count = 0

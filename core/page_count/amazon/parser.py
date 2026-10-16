@@ -2,7 +2,7 @@
 Amazon helpers that need no network or Calibre.
 
 Builds the product page URL from an ASIN and parses the page count
-out of the fetched HTML. The fetch function itself is supplied by main.py.
+out of the fetched HTML. The fetch function itself is supplied by fetcher.py.
 """
 import html as html_lib
 import re

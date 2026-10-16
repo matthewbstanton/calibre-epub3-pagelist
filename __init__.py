@@ -8,7 +8,7 @@ class EPUB3PageListPlugin(InterfaceActionBase):
     author = 'Matthew Stanton'
     version = (1, 0, 1)
     minimum_calibre_version = (6, 0, 0)
-    actual_plugin = 'calibre_plugins.epub3_pagelist.main:EPUB3PageListAction'
+    actual_plugin = 'calibre_plugins.epub3_pagelist.action:EPUB3PageListAction'
 
     def is_customizable(self):
         return True

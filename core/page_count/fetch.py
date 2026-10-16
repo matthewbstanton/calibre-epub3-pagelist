@@ -1,5 +1,5 @@
 """
-The result of a web request, as returned by the fetch function main.py supplies.
+The result of a web request, as returned by the fetch function fetcher.py supplies.
 """
 from dataclasses import dataclass
 from typing import Optional
