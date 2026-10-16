@@ -13,43 +13,66 @@ from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.goodreads import (book_url, parse_page_count, is_bot_challenge,
-                                                     has_waf_challenge_header)
+from calibre_plugins.epub3_pagelist.core.goodreads import book_url, parse_page_count
 
 # Seconds to wait for a Goodreads book page before giving up on that book
 GOODREADS_TIMEOUT = 30
-GOODREADS_BLOCKED_REASON = 'Goodreads blocked the request with a bot check; try again later'
+# Characters of the response body shown in the "Show details" text
+GOODREADS_BODY_PREVIEW = 3000
+
+def describe_response(url, user_agent, status=None, headers=None, body=None, error=None):
+    """
+    Return a readable description of a Goodreads request and its response,
+    for the "Show details" section of the summary dialog.
+    """
+    lines = [f'URL: {url}', f'User agent: {user_agent}']
+    if error is not None:
+        lines.append(f'Error: {error!r}')
+    if status is not None:
+        lines.append(f'Status: {status}')
+    if headers is not None:
+        lines.append('Headers:')
+        lines.extend(f'    {line}' for line in str(headers).strip().splitlines())
+    if body is not None:
+        text = body.decode('utf-8', errors='replace') if isinstance(body, bytes) else str(body)
+        lines.append(f'Body ({len(text)} characters, first {min(len(text), GOODREADS_BODY_PREVIEW)} shown):')
+        lines.append(text[:GOODREADS_BODY_PREVIEW])
+    return '\n'.join(lines)
 
 def fetch_goodreads_page_count(goodreads_id):
     """
-    Fetch the Goodreads book page for an ID.
-    Returns (page_count, None, False) on success, or (None, reason, blocked)
-    where blocked is True if Goodreads answered with a bot check.
-    The challenge is only detected and reported, never answered or retried.
+    Fetch the Goodreads book page for an ID and return (page_count, None, None),
+    or (None, reason, details) if the ID is invalid, the fetch fails or no count is found.
+    details describes the request and response, or is None if no request was made.
     """
     url = book_url(goodreads_id)
     if not url:
-        return None, f'invalid Goodreads ID "{goodreads_id}"', False
+        return None, f'invalid Goodreads ID "{goodreads_id}"', None
     from calibre import browser
+    from calibre.utils.random_ua import random_common_chrome_user_agent
+    # Same browser identity calibre's metadata sources and the Count Pages plugin use
+    user_agent = random_common_chrome_user_agent()
     try:
-        br = browser()
+        br = browser(user_agent=user_agent)
         response = br.open_novisit(url, timeout=GOODREADS_TIMEOUT)
         status = getattr(response, 'code', None)
         headers = response.info()
         raw = response.read()
     except Exception as e:
-        # An HTTP error status (e.g. 405) may also carry the WAF challenge header.
-        # Only the header counts here: a 404 page is small too, but is not a bot check.
+        # HTTP errors carry their own status, headers and body
         info = getattr(e, 'info', None)
-        if callable(info) and has_waf_challenge_header(info()):
-            return None, GOODREADS_BLOCKED_REASON, True
-        return None, f'could not fetch {url} ({e})', False
-    if is_bot_challenge(status, headers, raw):
-        return None, GOODREADS_BLOCKED_REASON, True
+        try:
+            body = e.read() if callable(getattr(e, 'read', None)) else None
+        except Exception:
+            body = None
+        details = describe_response(url, user_agent, status=getattr(e, 'code', None),
+                                    headers=info() if callable(info) else None, body=body, error=e)
+        return None, f'could not fetch {url} ({e})', details
     page_count = parse_page_count(raw)
     if not page_count:
-        return None, f'no page count found on {url}', False
-    return page_count, None, False
+        details = describe_response(url, user_agent, status=status, headers=headers, body=raw)
+        return None, f'no page count found on {url}', details
+    return page_count, None, None
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -109,8 +132,8 @@ class EPUB3PageListAction(InterfaceAction):
         error_details = []
         column_values = []
         skipped_goodreads = []
-        goodreads_blocked = False
-        
+        goodreads_details = []
+
         # 3. For each selected book
         for book_id in selected_ids:
             temp_file_used = False
@@ -174,13 +197,11 @@ class EPUB3PageListAction(InterfaceAction):
                     if not goodreads_id:
                         skipped_goodreads.append(f'{title}: no Goodreads ID in its identifiers')
                         continue
-                    if goodreads_blocked:
-                        # Goodreads already showed a bot check this run; don't send more requests
-                        skipped_goodreads.append(f'{title}: {GOODREADS_BLOCKED_REASON}')
-                        continue
-                    target_pages, reason, goodreads_blocked = fetch_goodreads_page_count(goodreads_id)
+                    target_pages, reason, details = fetch_goodreads_page_count(goodreads_id)
                     if not target_pages:
                         skipped_goodreads.append(f'{title}: {reason}')
+                        if details:
+                            goodreads_details.append(f'Book: {title} (ID {book_id})\n{details}\n' + '-' * 40)
                         continue
 
                 # f. Remove existing markers if overwriting
@@ -246,7 +267,7 @@ class EPUB3PageListAction(InterfaceAction):
                 self.gui,
                 'Errors during processing',
                 msg,
-                det_msg='\n\n'.join(error_details),
+                det_msg='\n\n'.join(error_details + goodreads_details),
                 show=True,
             )
         elif processed_count > 0 or skipped_goodreads:
@@ -260,7 +281,10 @@ class EPUB3PageListAction(InterfaceAction):
             msg = f'Successfully generated page list for {processed_count} book(s).'
             if notes:
                 msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
-            info_dialog(self.gui, 'Processing Complete', msg, show=True)
+            if goodreads_details:
+                msg += '\n\nClick "Show details" to see the Goodreads responses.'
+            info_dialog(self.gui, 'Processing Complete', msg,
+                        det_msg='\n\n'.join(goodreads_details), show=True)
         elif skipped_already_paginated > 0:
             info_dialog(
                 self.gui,

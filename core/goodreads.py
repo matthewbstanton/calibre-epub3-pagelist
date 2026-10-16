@@ -31,57 +31,6 @@ _PAGES_TEXT_RE = re.compile(r'(\d[\d,]*)\s*pages?\b', re.IGNORECASE)
 _JSON_KEY_RE = re.compile(r'"(?:numberOfPages|numPages)"\s*:\s*"?(\d+)"?')
 
 
-# Markers that show a response is a real book page rather than a bot check
-_BOOK_DATA_MARKERS = ('application/ld+json', '__NEXT_DATA__', 'pagesFormat', 'numberOfPages')
-# Real book pages are hundreds of KB; the AWS WAF challenge page is about 2-3 KB
-_TINY_BODY_BYTES = 20000
-
-
-def _header_names(headers) -> set[str]:
-    """
-    Return the lowercased header names from a dict, a list of pairs or an
-    email.message-style object (as returned by mechanize's response.info()).
-    """
-    if not headers:
-        return set()
-    if hasattr(headers, 'keys'):
-        names = headers.keys()
-    elif hasattr(headers, 'items'):
-        names = (name for name, _value in headers.items())
-    else:
-        names = (name for name, _value in headers)
-    return {str(name).strip().lower() for name in names}
-
-
-def has_waf_challenge_header(headers) -> bool:
-    """
-    Return True if the response headers carry AWS WAF's ``x-amzn-waf-action``.
-    """
-    return 'x-amzn-waf-action' in _header_names(headers)
-
-
-def is_bot_challenge(status, headers, body) -> bool:
-    """
-    Return True if a Goodreads response is a bot check (the AWS WAF
-    challenge) instead of a book page.
-
-    Treated as a bot check:
-    1. Any ``x-amzn-waf-action`` response header.
-    2. HTTP status 202, which the challenge uses instead of 200.
-    3. An empty or tiny body with none of the data a book page carries.
-    """
-    if has_waf_challenge_header(headers):
-        return True
-    if status == 202:
-        return True
-    if isinstance(body, bytes):
-        body = body.decode('utf-8', errors='replace')
-    body = body or ''
-    if len(body) < _TINY_BODY_BYTES and not any(marker in body for marker in _BOOK_DATA_MARKERS):
-        return True
-    return False
-
-
 def normalize_goodreads_id(goodreads_id) -> str | None:
     """
     Return the numeric part of a Goodreads ID, or None if it isn't one.

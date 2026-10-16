@@ -10,10 +10,7 @@ import unittest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from email.message import Message
-
-from core.goodreads import (parse_page_count, book_url, normalize_goodreads_id,
-                            is_bot_challenge, has_waf_challenge_header)
+from core.goodreads import parse_page_count, book_url, normalize_goodreads_id
 
 
 JSON_LD_PAGE = """<html><head>
@@ -106,67 +103,6 @@ class TestBookUrl(unittest.TestCase):
         self.assertIsNone(book_url('12/../x'))
         self.assertIsNone(book_url(''))
         self.assertIsNone(book_url(None))
-
-
-# A cut-down AWS WAF challenge page, like the ~2.4 KB one Goodreads returns
-WAF_CHALLENGE_PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title></title><script type="text/javascript">window.awsWafCookieDomainList = [];
-window.gokuProps = {"key":"AQIDAHjcYu","iv":"CgAHXj","context":"abc"};</script>
-<script src="https://example.token.awswaf.com/challenge.js"></script></head>
-<body><div id="challenge-container"></div><noscript>JavaScript is disabled</noscript></body></html>"""
-
-# A real book page is hundreds of KB; pad the fixture so it isn't "tiny"
-BOOK_PAGE = JSON_LD_PAGE + '<!-- ' + 'x' * 30000 + ' -->'
-
-
-class TestBotChallenge(unittest.TestCase):
-    """Tests for is_bot_challenge and has_waf_challenge_header."""
-
-    def test_book_page_is_not_a_challenge(self):
-        self.assertFalse(is_bot_challenge(200, {'Content-Type': 'text/html'}, BOOK_PAGE))
-
-    def test_small_book_page_with_book_data_is_not_a_challenge(self):
-        self.assertFalse(is_bot_challenge(200, {}, JSON_LD_PAGE))
-
-    def test_waf_header_is_a_challenge(self):
-        headers = {'Server': 'CloudFront', 'x-amzn-waf-action': 'challenge'}
-        self.assertTrue(is_bot_challenge(200, headers, BOOK_PAGE))
-
-    def test_waf_header_any_case(self):
-        self.assertTrue(has_waf_challenge_header({'X-Amzn-Waf-Action': 'captcha'}))
-
-    def test_waf_header_in_list_of_pairs(self):
-        self.assertTrue(has_waf_challenge_header([('server', 'CloudFront'), ('x-amzn-waf-action', 'challenge')]))
-
-    def test_waf_header_in_message_object(self):
-        # mechanize's response.info() is an email.message-style object
-        headers = Message()
-        headers['Server'] = 'CloudFront'
-        headers['x-amzn-waf-action'] = 'challenge'
-        self.assertTrue(has_waf_challenge_header(headers))
-
-    def test_no_headers(self):
-        self.assertFalse(has_waf_challenge_header(None))
-        self.assertFalse(has_waf_challenge_header({}))
-
-    def test_status_202_is_a_challenge(self):
-        self.assertTrue(is_bot_challenge(202, {}, BOOK_PAGE))
-
-    def test_challenge_page_body_is_a_challenge(self):
-        self.assertTrue(is_bot_challenge(200, {}, WAF_CHALLENGE_PAGE))
-
-    def test_challenge_page_bytes(self):
-        self.assertTrue(is_bot_challenge(200, {}, WAF_CHALLENGE_PAGE.encode('utf-8')))
-
-    def test_empty_body_is_a_challenge(self):
-        self.assertTrue(is_bot_challenge(200, {}, b''))
-        self.assertTrue(is_bot_challenge(200, {}, None))
-
-    def test_reported_response(self):
-        # The response from the bug report: 202, WAF header, small page with no book data
-        headers = {'server': 'CloudFront', 'x-amzn-waf-action': 'challenge'}
-        self.assertTrue(is_bot_challenge(202, headers, WAF_CHALLENGE_PAGE))
-        self.assertIsNone(parse_page_count(WAF_CHALLENGE_PAGE))
 
 
 if __name__ == '__main__':

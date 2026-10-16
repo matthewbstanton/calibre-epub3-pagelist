@@ -85,8 +85,6 @@ If you used the earlier **Use custom column for page count** checkbox, your sett
 
 When **Use Goodreads Id** is selected, a book is skipped, and listed with the reason in the summary dialog, if it has no Goodreads ID, the page can't be fetched (each request times out after 30 seconds), or no page count can be found on it. The other books in the batch are still processed. Books that already have a page list with overwrite disabled are skipped before any request is made.
 
-Goodreads sometimes blocks automated requests with a bot check (an AWS WAF challenge page instead of the book page). The plugin doesn't try to get past it. It skips that book with *"Goodreads blocked the request with a bot check; try again later"*, sends no more Goodreads requests for the rest of that run, and skips the remaining Goodreads books with the same message. The block usually clears on its own, so run the plugin again later on the skipped books.
-
 When **Custom column** is selected, the plugin shows a dialog after processing listing the page count read for each book. A book whose column is empty or non-numeric, or a column name that doesn't exist, is reported as an error for that book.
 
 ---
