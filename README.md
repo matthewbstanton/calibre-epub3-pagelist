@@ -96,15 +96,15 @@ When **Use Goodreads Id** or **Use Amazon Id** is selected, a book is skipped, a
 
 ### Existing page markers
 
-Unless **Ignore page markers, always generate pages** is selected, the plugin looks for print page markers before it paginates a book. It uses the first of these it finds:
+Unless **Ignore page markers, always generate pages** is selected, the plugin looks for print page markers before it paginates a book. It tries these in order and uses the first that finds any:
 
-1. **An existing page-list**: a nav page-list, NCX `pageList` or `page-map.xml` whose links point at elements in the book. This completes a book that has only one or two of the three.
+1. **An existing page-list**: the nav `page-list`, then the NCX `pageList`, then `page-map.xml`. A page-list is only used if at least 90% of its entries point at elements in the book's content documents; otherwise the next one is tried. Because books that already have a page-list are skipped unless **Overwrite existing page-list** is ticked (see below), this step only runs with overwrite on.
 2. **Page break markers**: elements with `epub:type="pagebreak"` or `role="doc-pagebreak"`, e.g. `<span epub:type="pagebreak" id="page_12" title="12"/>`. The page number comes from `aria-label`, `title` or the element's text. A marker without an `id` is given one (`page-12`).
 3. **Page-like ids**: empty `<a>` or `<span>` elements (or ones whose only text is the page number) with ids such as `page12`, `page_12`, `p12`, `pg12`, `Page_xii` or `pagexii`, including roman numerals for front matter. Only used when the book has no page break markers, and only if there are at least 10 of them and their numbers go up in reading order (arabic and roman numbers are checked separately), so that ordinary ids such as paragraph numbers aren't mistaken for pages.
 
-The nav page-list, NCX `pageList` and `page-map.xml` are then built from those markers, and no synthetic markers are added. Because the pages follow a print edition, `pageBreakSource: none` is not added (and an existing `none` is removed). The page count source isn't used for these books, so no web request is made for them.
+All three outputs (nav page-list, NCX `pageList` and `page-map.xml`) are then rebuilt from those markers, and no synthetic markers are added. Because the pages follow a print edition, `pageBreakSource: none` is not added (and an existing `none` is removed). The page count source isn't used for these books, so no web request is made for them.
 
-The **Overwrite existing page-list** setting still applies: with it off, a book that already has any page-list (even one of the three) is skipped. To complete a partial page-list, tick **Overwrite existing page-list**; the page-list is then rebuilt from the existing one.
+The **Overwrite existing page-list** setting is checked before any of this: with it off, a book that already has any page-list (even just one of the three) is skipped. To complete a book that has only some of the three, for example only `page-map.xml`, tick **Overwrite existing page-list**; step 1 then rebuilds all three from the existing one.
 
 The default uses the book's markers because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and a book without markers is paginated exactly as before. Select **Use the book's page markers, skip books without them** if you only want page-lists for books with real print pages.
 
