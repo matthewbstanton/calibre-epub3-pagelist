@@ -6,6 +6,7 @@ XHTML_NS = "http://www.w3.org/1999/xhtml"
 EPUB_OPS_NS = "http://www.idpf.org/2007/ops"
 OPF_NS = "http://www.idpf.org/2007/opf"
 NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
+PAGE_MAP_MEDIA_TYPE = "application/oebps-page-map+xml"
 
 NSMAP = {
     None: XHTML_NS,
@@ -59,7 +60,7 @@ class NavBuilder:
 
         # Check page-map.xml
         try:
-            pm_items = self.container.opf_xpath('//opf:item[@media-type="application/oebps-page-map+xml"]')
+            pm_items = self.container.opf_xpath(f'//opf:item[@media-type="{PAGE_MAP_MEDIA_TYPE}"]')
             if pm_items:
                 return True
         except Exception:
@@ -310,8 +311,23 @@ class NavBuilder:
 
     def _build_adobe_page_map(self, page_breaks: list, overwrite: bool) -> None:
         try:
+            existing = self._find_page_maps()
+            if existing and not overwrite:
+                return
+
+            # Remove every existing page-map, whether written by an earlier
+            # run or shipped with the book under another name, so the book
+            # ends up with exactly one. The container has no way to replace
+            # a file's raw bytes, so it is removed and added again.
+            for name in existing:
+                self.container.remove_item(name)
+
             opf_dir = os.path.dirname(self.container.opf_name)
             page_map_name = f"{opf_dir}/page-map.xml" if opf_dir else "page-map.xml"
+            if self.container.has_name(page_map_name):
+                # Taken by a file that is not a page-map
+                stem = f"page-map_{uuid.uuid4().hex[:8]}.xml"
+                page_map_name = f"{opf_dir}/{stem}" if opf_dir else stem
 
             root = etree.Element(f'{{{OPF_NS}}}page-map', nsmap={None: OPF_NS})
             for pb in page_breaks:
@@ -323,20 +339,12 @@ class NavBuilder:
                 )
 
             page_map_bytes = etree.tostring(root, encoding='utf-8', xml_declaration=True, pretty_print=True)
-
-            if hasattr(self.container, 'has_name') and self.container.has_name(page_map_name):
-                if not overwrite:
-                    return
-                if hasattr(self.container, 'set_raw_data'):
-                    self.container.set_raw_data(page_map_name, page_map_bytes)
-            elif hasattr(self.container, 'add_file'):
-                self.container.add_file(page_map_name, page_map_bytes, media_type='application/oebps-page-map+xml')
+            self.container.add_file(page_map_name, page_map_bytes, media_type=PAGE_MAP_MEDIA_TYPE)
 
             # Register in spine and package
             opf_tree = self.container.opf
             if opf_tree is not None:
-                pm_item = self.container.opf_xpath(f'//opf:item[@href="{self.container.name_to_href(page_map_name, base=self.container.opf_name)}"]')
-                pm_id = pm_item[0].get('id') if pm_item else 'page-map'
+                pm_id = self._manifest_id(page_map_name) or 'page-map'
 
                 spine = opf_tree.find(f'.//{{{OPF_NS}}}spine')
                 if spine is not None:
@@ -346,6 +354,36 @@ class NavBuilder:
                 self.container.dirty(self.container.opf_name)
         except Exception:
             pass
+
+    def _find_page_maps(self) -> list:
+        """
+        Names of the page-maps in the book: manifest items with the page-map
+        media type, plus the item the spine's ``page-map`` attribute names.
+        """
+        items = list(self.container.opf_xpath(f'//opf:item[@media-type="{PAGE_MAP_MEDIA_TYPE}"]'))
+        spine_ref = None
+        opf_tree = self.container.opf
+        spine = opf_tree.find(f'.//{{{OPF_NS}}}spine') if opf_tree is not None else None
+        if spine is not None:
+            spine_ref = spine.get('page-map')
+        if spine_ref:
+            items.extend(self.container.opf_xpath(f'//opf:item[@id="{spine_ref}"]'))
+
+        names = []
+        for item in items:
+            href = item.get('href')
+            if not href:
+                continue
+            name = self.container.href_to_name(href, base=self.container.opf_name)
+            if name not in names:
+                names.append(name)
+        return names
+
+    def _manifest_id(self, name: str) -> str | None:
+        for item in self.container.opf_xpath('//opf:item[@id and @href]'):
+            if self.container.href_to_name(item.get('href'), base=self.container.opf_name) == name:
+                return item.get('id')
+        return None
 
     # ------------------------------------------------------------------
     # 4. OPF Metadata & Accessibility
