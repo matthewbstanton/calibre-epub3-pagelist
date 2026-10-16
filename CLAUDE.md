@@ -14,6 +14,8 @@ Calibre GUI plugin that injects synthetic page-list navigation (EPUB3 `nav` page
 - `utils.py` — icon loading from the plugin ZIP.
 - `core/paginator.py` — computes `PageBreak` positions. `paginate()` uses characters per page, snaps to paragraphs and starts each spine item on a new page. `fit_to_page_count()` aims for a target page count instead (used by the custom-column option).
 - `core/marker_injector.py` — inserts and removes `doc-pagebreak` markers in content documents.
+- `core/page_count/` — page count sources, one class per file. Each one (`CharsPerPageSource`, `CustomColumnSource`, `GoodreadsSource`) implements `PageCountSource.get_page_count(db, book_id)` from `base.py`. `main.py` picks one with `create_page_count_source()` (`factory.py`) and supplies the Calibre-based `fetch_url`.
+  - `goodreads/source.py` is the Goodreads source; `goodreads/parser.py` builds URLs and parses page counts from HTML (no network).
 - `core/nav_builder.py` — writes the page-list into `nav.xhtml` and `toc.ncx`, generates `page-map.xml`, and adds accessibility metadata to the OPF.
 
 ## Constraints

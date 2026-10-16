@@ -2,11 +2,8 @@ from qt.core import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheck
                      QGroupBox, QRadioButton, QButtonGroup)
 from calibre.utils.config import JSONConfig
 
-# Values for the 'page_count_source' pref
-SOURCE_CHARS_PER_PAGE = 'chars_per_page'
-SOURCE_CUSTOM_COLUMN = 'custom_column'
-SOURCE_GOODREADS_ID = 'goodreads_id'
-PAGE_COUNT_SOURCES = (SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID)
+from calibre_plugins.epub3_pagelist.core.page_count import (
+    SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, PAGE_COUNT_SOURCES)
 
 # Persistent config storage for the plugin
 plugin_prefs = JSONConfig('plugins/epub3_pagelist')

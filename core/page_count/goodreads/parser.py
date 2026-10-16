@@ -2,7 +2,7 @@
 Goodreads helpers that need no network or Calibre.
 
 Builds the book page URL from a Goodreads ID and parses the page count
-out of the fetched HTML. The fetch itself lives in main.py.
+out of the fetched HTML. The fetch function itself is supplied by main.py.
 """
 import html as html_lib
 import json

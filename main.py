@@ -8,56 +8,28 @@ from calibre.gui2 import error_dialog, info_dialog
 from calibre.ebooks.oeb.polish.container import get_container
 from calibre_plugins.epub3_pagelist.utils import get_icons
 
-from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_source,
-                                                   SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID)
+from calibre_plugins.epub3_pagelist.config import plugin_prefs, get_page_count_source
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.goodreads import book_url, parse_page_count
+from calibre_plugins.epub3_pagelist.core.page_count import FetchResult, create_page_count_source
 
-# Seconds to wait for a Goodreads book page before giving up on that book
-GOODREADS_TIMEOUT = 30
-# Characters of the response body shown in the "Show details" text
-GOODREADS_BODY_PREVIEW = 3000
+# Seconds to wait for a web page before giving up on that book
+FETCH_TIMEOUT = 30
 
-def describe_response(url, user_agent, status=None, headers=None, body=None, error=None):
+def fetch_url(url):
     """
-    Return a readable description of a Goodreads request and its response,
-    for the "Show details" section of the summary dialog.
+    Fetch a URL with calibre's browser and return a FetchResult.
+    Used by page count sources that read a web page, such as Goodreads.
     """
-    lines = [f'URL: {url}', f'User agent: {user_agent}']
-    if error is not None:
-        lines.append(f'Error: {error!r}')
-    if status is not None:
-        lines.append(f'Status: {status}')
-    if headers is not None:
-        lines.append('Headers:')
-        lines.extend(f'    {line}' for line in str(headers).strip().splitlines())
-    if body is not None:
-        text = body.decode('utf-8', errors='replace') if isinstance(body, bytes) else str(body)
-        lines.append(f'Body ({len(text)} characters, first {min(len(text), GOODREADS_BODY_PREVIEW)} shown):')
-        lines.append(text[:GOODREADS_BODY_PREVIEW])
-    return '\n'.join(lines)
-
-def fetch_goodreads_page_count(goodreads_id):
-    """
-    Fetch the Goodreads book page for an ID and return (page_count, None, None),
-    or (None, reason, details) if the ID is invalid, the fetch fails or no count is found.
-    details describes the request and response, or is None if no request was made.
-    """
-    url = book_url(goodreads_id)
-    if not url:
-        return None, f'invalid Goodreads ID "{goodreads_id}"', None
     from calibre import browser
     from calibre.utils.random_ua import random_common_chrome_user_agent
     # Same browser identity calibre's metadata sources and the Count Pages plugin use
     user_agent = random_common_chrome_user_agent()
     try:
-        br = browser(user_agent=user_agent)
-        response = br.open_novisit(url, timeout=GOODREADS_TIMEOUT)
-        status = getattr(response, 'code', None)
-        headers = response.info()
-        raw = response.read()
+        response = browser(user_agent=user_agent).open_novisit(url, timeout=FETCH_TIMEOUT)
+        return FetchResult(user_agent=user_agent, status=getattr(response, 'code', None),
+                           headers=str(response.info()), body=response.read())
     except Exception as e:
         # HTTP errors carry their own status, headers and body
         info = getattr(e, 'info', None)
@@ -65,14 +37,8 @@ def fetch_goodreads_page_count(goodreads_id):
             body = e.read() if callable(getattr(e, 'read', None)) else None
         except Exception:
             body = None
-        details = describe_response(url, user_agent, status=getattr(e, 'code', None),
-                                    headers=info() if callable(info) else None, body=body, error=e)
-        return None, f'could not fetch {url} ({e})', details
-    page_count = parse_page_count(raw)
-    if not page_count:
-        details = describe_response(url, user_agent, status=status, headers=headers, body=raw)
-        return None, f'no page count found on {url}', details
-    return page_count, None, None
+        return FetchResult(user_agent=user_agent, status=getattr(e, 'code', None),
+                           headers=str(info()) if callable(info) else None, body=body, error=e)
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -122,7 +88,7 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
-        page_count_source = get_page_count_source()
+        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, fetch_url)
 
         db = self.gui.current_db
         processed_count = 0
@@ -130,9 +96,8 @@ class EPUB3PageListAction(InterfaceAction):
         skipped_already_paginated = 0
         error_count = 0
         error_details = []
-        column_values = []
-        skipped_goodreads = []
-        goodreads_details = []
+        skipped_no_page_count = []
+        skipped_details = []
 
         # 3. For each selected book
         for book_id in selected_ids:
@@ -172,12 +137,6 @@ class EPUB3PageListAction(InterfaceAction):
                 
                 # e. Load config
                 overwrite = plugin_prefs['overwrite_existing']
-                target_pages = None
-                if page_count_source == SOURCE_CUSTOM_COLUMN:
-                    column_name = '#' + plugin_prefs['custom_column_name'].strip().lstrip('#')
-                    target_pages = int(db.new_api.field_for(column_name, book_id))
-                    column_values.append(f"{db.new_api.field_for('title', book_id)}: {target_pages}")
-
                 config = PaginationConfig(
                     chars_per_page=plugin_prefs['chars_per_page'],
                     snap_to_paragraph=plugin_prefs['snap_to_paragraph']
@@ -189,20 +148,15 @@ class EPUB3PageListAction(InterfaceAction):
                     skipped_already_paginated += 1
                     continue
 
-                # Fetched after the overwrite check so skipped books cost no request
-                if page_count_source == SOURCE_GOODREADS_ID:
+                # Asked after the overwrite check so skipped books cost no web request
+                page_count = page_count_source.get_page_count(db.new_api, book_id)
+                if page_count.skipped:
                     title = db.new_api.field_for('title', book_id)
-                    identifiers = db.new_api.field_for('identifiers', book_id) or {}
-                    goodreads_id = identifiers.get('goodreads')
-                    if not goodreads_id:
-                        skipped_goodreads.append(f'{title}: no Goodreads ID in its identifiers')
-                        continue
-                    target_pages, reason, details = fetch_goodreads_page_count(goodreads_id)
-                    if not target_pages:
-                        skipped_goodreads.append(f'{title}: {reason}')
-                        if details:
-                            goodreads_details.append(f'Book: {title} (ID {book_id})\n{details}\n' + '-' * 40)
-                        continue
+                    skipped_no_page_count.append(f'{title}: {page_count.skip_reason}')
+                    if page_count.details:
+                        skipped_details.append(f'Book: {title} (ID {book_id})\n{page_count.details}\n' + '-' * 40)
+                    continue
+                target_pages = page_count.pages
 
                 # f. Remove existing markers if overwriting
                 injector = MarkerInjector(container)
@@ -245,46 +199,41 @@ class EPUB3PageListAction(InterfaceAction):
                         pass
         
         # 4. Show completion dialog
-        if column_values:
-            column_name = plugin_prefs['custom_column_name'].strip().lstrip('#')
-            info_dialog(
-                self.gui,
-                'Custom column values',
-                f"Values read from custom column '#{column_name}':\n\n" + '\n'.join(column_values),
-                show=True,
-            )
+        summary = page_count_source.summary()
+        if summary:
+            info_dialog(self.gui, summary[0], summary[1], show=True)
 
-        goodreads_note = ''
-        if skipped_goodreads:
-            goodreads_note = (f'Skipped {len(skipped_goodreads)} book(s) with no Goodreads page count:\n'
-                              + '\n'.join(f'    {n}' for n in skipped_goodreads))
+        page_count_note = ''
+        if skipped_no_page_count:
+            page_count_note = (f'Skipped {len(skipped_no_page_count)} book(s) with no page count:\n'
+                               + '\n'.join(f'    {n}' for n in skipped_no_page_count))
 
         if error_count > 0:
             msg = f'Encountered errors on {error_count} book(s). Click "Show details" for the full traceback.'
-            if goodreads_note:
-                msg += '\n\n' + goodreads_note
+            if page_count_note:
+                msg += '\n\n' + page_count_note
             error_dialog(
                 self.gui,
                 'Errors during processing',
                 msg,
-                det_msg='\n\n'.join(error_details + goodreads_details),
+                det_msg='\n\n'.join(error_details + skipped_details),
                 show=True,
             )
-        elif processed_count > 0 or skipped_goodreads:
+        elif processed_count > 0 or skipped_no_page_count:
             notes = []
             if skipped_already_paginated > 0:
                 notes.append(f'Skipped {skipped_already_paginated} book(s) that already had a page list (overwrite is disabled)')
             if skipped_non_epub3 > 0:
                 notes.append(f'Skipped {skipped_non_epub3} book(s) because they are not EPUB 3')
-            if goodreads_note:
-                notes.append(goodreads_note)
+            if page_count_note:
+                notes.append(page_count_note)
             msg = f'Successfully generated page list for {processed_count} book(s).'
             if notes:
                 msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
-            if goodreads_details:
-                msg += '\n\nClick "Show details" to see the Goodreads responses.'
+            if skipped_details:
+                msg += '\n\nClick "Show details" to see the responses for skipped books.'
             info_dialog(self.gui, 'Processing Complete', msg,
-                        det_msg='\n\n'.join(goodreads_details), show=True)
+                        det_msg='\n\n'.join(skipped_details), show=True)
         elif skipped_already_paginated > 0:
             info_dialog(
                 self.gui,

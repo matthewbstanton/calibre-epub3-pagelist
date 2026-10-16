@@ -10,7 +10,7 @@ import unittest
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from core.goodreads import parse_page_count, book_url, normalize_goodreads_id
+from core.page_count.goodreads.parser import parse_page_count, book_url, normalize_goodreads_id
 
 
 JSON_LD_PAGE = """<html><head>
