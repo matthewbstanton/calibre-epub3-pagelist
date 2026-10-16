@@ -98,6 +98,7 @@ class EPUB3PageListAction(InterfaceAction):
         error_details = []
         skipped_no_page_count = []
         skipped_details = []
+        page_counts = []
 
         # 3. For each selected book
         for book_id in selected_ids:
@@ -185,6 +186,11 @@ class EPUB3PageListAction(InterfaceAction):
                         db.new_api.set_format(book_id, 'EPUB', f)
 
                 processed_count += 1
+                title = db.new_api.field_for('title', book_id)
+                if target_pages and target_pages != len(pages):
+                    page_counts.append(f'{title}: {len(pages)} pages (target {target_pages})')
+                else:
+                    page_counts.append(f'{title}: {len(pages)} pages')
                 
             except Exception as e:
                 error_count += 1
@@ -208,8 +214,12 @@ class EPUB3PageListAction(InterfaceAction):
             page_count_note = (f'Skipped {len(skipped_no_page_count)} book(s) with no page count:\n'
                                + '\n'.join(f'    {n}' for n in skipped_no_page_count))
 
+        page_counts_note = '\n'.join(f'    {c}' for c in page_counts)
+
         if error_count > 0:
             msg = f'Encountered errors on {error_count} book(s). Click "Show details" for the full traceback.'
+            if page_counts:
+                msg += f'\n\nGenerated page list for {processed_count} book(s):\n' + page_counts_note
             if page_count_note:
                 msg += '\n\n' + page_count_note
             error_dialog(
@@ -228,6 +238,8 @@ class EPUB3PageListAction(InterfaceAction):
             if page_count_note:
                 notes.append(page_count_note)
             msg = f'Successfully generated page list for {processed_count} book(s).'
+            if page_counts:
+                msg += '\n' + page_counts_note
             if notes:
                 msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
             if skipped_details:
