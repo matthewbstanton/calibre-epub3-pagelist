@@ -8,7 +8,8 @@ from calibre.gui2 import error_dialog, info_dialog
 from calibre.ebooks.oeb.polish.container import get_container
 from calibre_plugins.epub3_pagelist.utils import get_icons
 
-from calibre_plugins.epub3_pagelist.config import plugin_prefs
+from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_source,
+                                                   SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID)
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
@@ -61,6 +62,18 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
+        # Goodreads Id is selectable in settings but has no lookup yet, so skip every book
+        page_count_source = get_page_count_source()
+        if page_count_source == SOURCE_GOODREADS_ID:
+            info_dialog(
+                self.gui,
+                'Not implemented yet',
+                f'Skipped {len(selected_ids)} book(s): the Goodreads Id page count source is not implemented yet.\n\n'
+                'Choose "Characters per page" or "Custom column" under "Page count source" in plugin preferences.',
+                show=True,
+            )
+            return
+
         db = self.gui.current_db
         processed_count = 0
         skipped_non_epub3 = 0
@@ -108,7 +121,7 @@ class EPUB3PageListAction(InterfaceAction):
                 # e. Load config
                 overwrite = plugin_prefs['overwrite_existing']
                 target_pages = None
-                if plugin_prefs['use_custom_column']:
+                if page_count_source == SOURCE_CUSTOM_COLUMN:
                     column_name = '#' + plugin_prefs['custom_column_name'].strip().lstrip('#')
                     target_pages = int(db.new_api.field_for(column_name, book_id))
                     column_values.append(f"{db.new_api.field_for('title', book_id)}: {target_pages}")
