@@ -70,13 +70,13 @@ calibre-customize -a epub3_pagelist.zip
 
 ## Configuration
 
-You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB3 Page List Generator** → **Customize plugin**:
+You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB3 Page List Generator** → **Customize plugin**, or straight from the toolbar: click the arrow next to the **Generate Page List** button and choose **Customize plugin…**. Both open the same settings.
 
 | Setting | Default | Description |
 |---|---|---|
 | **Characters per page** | `1850` | Target character count per page (based on standard Kindle pagination). |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
-| **Overwrite existing page-list** | `True` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
+| **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
 | **Use custom column for page count** | `False` | If enabled, the plugin reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). If disabled, **Characters per page** is used. |
 | **Custom column name** | empty | Lookup name of the custom column holding the page count, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. Only used when **Use custom column for page count** is enabled. |
 

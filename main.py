@@ -1,6 +1,8 @@
 import os
 import traceback
 
+from qt.core import QMenu, QToolButton
+
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2 import error_dialog, info_dialog
 from calibre.ebooks.oeb.polish.container import get_container
@@ -19,15 +21,33 @@ class EPUB3PageListAction(InterfaceAction):
     name = 'EPUB3 Page List'
     action_spec = ('Generate Page List', None, 'Generate synthetic page-list navigation for EPUB3 files', None)
     action_type = 'current'
+    # Clicking the button runs the action; the arrow beside it opens the menu
+    popup_type = QToolButton.ToolButtonPopupMode.MenuButtonPopup
 
     def genesis(self):
         """
         Called once during plugin initialization.
-        Sets up the toolbar icon and connects the action.
+        Sets up the toolbar icon, the dropdown menu and connects the action.
         """
         icon = get_icons('images/icon.png', 'EPUB3 Page List Generator')
         self.qaction.setIcon(icon)
         self.qaction.triggered.connect(self.generate_page_list)
+
+        # Dropdown menu, also shown as a submenu in menus and context menus
+        menu = QMenu(self.gui)
+        self.create_menu_action(menu, 'epub3-pagelist-generate', 'Generate Page List',
+                                icon=icon, shortcut=False, triggered=self.generate_page_list)
+        menu.addSeparator()
+        self.create_menu_action(menu, 'epub3-pagelist-customize', 'Customize plugin…',
+                                icon='config.png', shortcut=False, triggered=self.show_configuration)
+        self.qaction.setMenu(menu)
+
+    def show_configuration(self):
+        """
+        Opens the same settings dialog as Preferences → Plugins → Customize plugin.
+        do_user_config() calls config_widget() and save_settings() from __init__.py.
+        """
+        self.interface_action_base_plugin.do_user_config(self.gui)
 
     def generate_page_list(self):
         """

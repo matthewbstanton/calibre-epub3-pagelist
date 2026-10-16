@@ -5,7 +5,7 @@ from calibre.utils.config import JSONConfig
 plugin_prefs = JSONConfig('plugins/epub3_pagelist')
 plugin_prefs.defaults['chars_per_page'] = 1850
 plugin_prefs.defaults['snap_to_paragraph'] = True
-plugin_prefs.defaults['overwrite_existing'] = True
+plugin_prefs.defaults['overwrite_existing'] = False
 plugin_prefs.defaults['use_custom_column'] = False
 plugin_prefs.defaults['custom_column_name'] = ''
 
