@@ -34,7 +34,7 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - Automatically skips EPUB 2 files (shows informative summary after processing).
   - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating.
 - **Customizable**:
-  - Configurable characters-per-page target, snapping threshold, and overwrite behavior.
+  - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column to set each book's page count.
 
 ---
 
@@ -77,6 +77,10 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | **Characters per page** | `1850` | Target character count per page (based on standard Kindle pagination). |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `True` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
+| **Use custom column for page count** | `False` | If enabled, the plugin reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). If disabled, **Characters per page** is used. |
+| **Custom column name** | empty | Lookup name of the custom column holding the page count, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. Only used when **Use custom column for page count** is enabled. |
+
+When the custom column is enabled, the plugin shows a dialog after processing listing the page count read for each book. A book whose column is empty or non-numeric, or a column name that doesn't exist, is reported as an error for that book.
 
 ---
 
