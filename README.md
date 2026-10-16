@@ -83,8 +83,10 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Custom column** | empty | Reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). Enter the column's lookup name, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. The name box is only enabled when this option is selected. |
 | ↳ **Use Goodreads Id** | — | Looks up each book's `goodreads` identifier (as stored by the Goodreads metadata source plugin), fetches `https://www.goodreads.com/book/show/<id>` and generates a page-list with the page count shown there (or the closest count it can reach). Needs an internet connection. |
 | ↳ **Use Amazon Id** | — | Looks up each book's `amazon` identifier (the ASIN, as stored by Calibre's Amazon metadata source), fetches `https://www.amazon.com/dp/<ASIN>` and generates a page-list with the print length shown there (or the closest count it can reach). Only the `amazon` identifier is used; regional ones such as `amazon_uk` are ignored. Needs an internet connection. |
-| **Use existing page markers from retail ePubs when present** | `True` | If the book already marks its print pages, builds the page-list from those real page numbers and adds no synthetic markers. See [Existing page markers](#existing-page-markers). |
-| ↳ **Generate synthetic pages when a book has no markers** | `True` | Only used with the option above. If ticked, books without page markers are paginated with the page count source as usual. If not, they are skipped and listed in the summary dialog. |
+| **Existing page markers** | Use the book's page markers, generate pages if it has none | Radio group that picks what to do with print page markers already in the book. See [Existing page markers](#existing-page-markers). |
+| ↳ **Use the book's page markers, generate pages if it has none** | — | Default option. If the book marks its print pages, builds the page-list from those real page numbers and adds no synthetic markers. Books without markers are paginated with the page count source as usual. |
+| ↳ **Use the book's page markers, skip books without them** | — | As above, but books without page markers are skipped and listed in the summary dialog. |
+| ↳ **Ignore page markers, always generate pages** | — | Always paginates with the page count source, as earlier versions did. |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
 
@@ -94,7 +96,7 @@ When **Use Goodreads Id** or **Use Amazon Id** is selected, a book is skipped, a
 
 ### Existing page markers
 
-With **Use existing page markers from retail ePubs when present** ticked (the default), the plugin looks for print page markers before it paginates a book. It uses the first of these it finds:
+Unless **Ignore page markers, always generate pages** is selected, the plugin looks for print page markers before it paginates a book. It uses the first of these it finds:
 
 1. **An existing page-list**: a nav page-list, NCX `pageList` or `page-map.xml` whose links point at elements in the book. This completes a book that has only one or two of the three.
 2. **Page break markers**: elements with `epub:type="pagebreak"` or `role="doc-pagebreak"`, e.g. `<span epub:type="pagebreak" id="page_12" title="12"/>`. The page number comes from `aria-label`, `title` or the element's text. A marker without an `id` is given one (`page-12`).
@@ -104,7 +106,7 @@ The nav page-list, NCX `pageList` and `page-map.xml` are then built from those m
 
 The **Overwrite existing page-list** setting still applies: with it off, a book that already has any page-list (even one of the three) is skipped. To complete a partial page-list, tick **Overwrite existing page-list**; the page-list is then rebuilt from the existing one.
 
-The default is on because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and with the fallback ticked a book without markers is paginated exactly as before. Untick the fallback if you only want page-lists for books with real print pages.
+The default uses the book's markers because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and a book without markers is paginated exactly as before. Select **Use the book's page markers, skip books without them** if you only want page-lists for books with real print pages.
 
 Markers the plugin adds are tagged with `data-epub3-pagelist="synthetic"`, and only those (plus untagged markers from older plugin versions, recognised by their exact form and numbering) are removed when a page-list is regenerated.
 

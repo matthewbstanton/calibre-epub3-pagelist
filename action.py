@@ -8,7 +8,8 @@ from calibre.gui2 import error_dialog, info_dialog
 from calibre.ebooks.oeb.polish.container import get_container
 from calibre_plugins.epub3_pagelist.utils import get_icons
 
-from calibre_plugins.epub3_pagelist.config import plugin_prefs, get_page_count_source
+from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_source, get_existing_markers_mode,
+                                                    MARKERS_ONLY, MARKERS_IGNORE)
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
@@ -65,8 +66,7 @@ class EPUB3PageListAction(InterfaceAction):
             return
         
         page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
-        use_existing_markers = plugin_prefs['use_existing_markers']
-        existing_markers_fallback = plugin_prefs['existing_markers_fallback']
+        markers_mode = get_existing_markers_mode()
 
         db = self.gui.current_db
         processed_count = 0
@@ -137,11 +137,11 @@ class EPUB3PageListAction(InterfaceAction):
                 # g. Use the book's own print page markers if it has them
                 pages = None
                 target_pages = None
-                if use_existing_markers:
+                if markers_mode != MARKERS_IGNORE:
                     detection = ExistingMarkerDetector(container).detect()
                     if detection.found:
                         pages = detection.markers
-                    elif not existing_markers_fallback:
+                    elif markers_mode == MARKERS_ONLY:
                         skipped_no_markers.append(db.new_api.field_for('title', book_id))
                         continue
 

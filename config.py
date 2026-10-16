@@ -5,17 +5,20 @@ from calibre.utils.config import JSONConfig
 from calibre_plugins.epub3_pagelist.core.page_count import (
     SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, SOURCE_AMAZON_ID, PAGE_COUNT_SOURCES)
 
+# Existing page marker modes
+MARKERS_PREFER = 'prefer'  # use the book's markers, generate pages for books without them
+MARKERS_ONLY = 'only'      # use the book's markers, skip books without them
+MARKERS_IGNORE = 'ignore'  # always generate pages
+EXISTING_MARKERS_MODES = (MARKERS_PREFER, MARKERS_ONLY, MARKERS_IGNORE)
+
 # Persistent config storage for the plugin
 plugin_prefs = JSONConfig('plugins/epub3_pagelist')
 plugin_prefs.defaults['chars_per_page'] = 1850
 plugin_prefs.defaults['snap_to_paragraph'] = True
 plugin_prefs.defaults['overwrite_existing'] = False
 plugin_prefs.defaults['page_count_source'] = SOURCE_CHARS_PER_PAGE
-# Build the page-list from print page markers already in the book, when it has them
-plugin_prefs.defaults['use_existing_markers'] = True
-# With use_existing_markers: True paginates books without markers using the
-# page count source, False skips them
-plugin_prefs.defaults['existing_markers_fallback'] = True
+# What to do with print page markers already in the book, one of EXISTING_MARKERS_MODES
+plugin_prefs.defaults['existing_markers_mode'] = MARKERS_PREFER
 # Superseded by 'page_count_source'; still read to migrate older settings
 plugin_prefs.defaults['use_custom_column'] = False
 plugin_prefs.defaults['custom_column_name'] = ''
@@ -35,6 +38,15 @@ def get_page_count_source():
     if plugin_prefs['use_custom_column']:
         return SOURCE_CUSTOM_COLUMN
     return SOURCE_CHARS_PER_PAGE
+
+def get_existing_markers_mode():
+    """
+    Return the configured existing page marker mode, one of EXISTING_MARKERS_MODES.
+    """
+    mode = plugin_prefs['existing_markers_mode']
+    if mode in EXISTING_MARKERS_MODES:
+        return mode
+    return MARKERS_PREFER
 
 class ConfigWidget(QWidget):
     """
@@ -108,25 +120,38 @@ class ConfigWidget(QWidget):
 
         layout.addWidget(source_box)
 
-        # Existing print page markers
-        self.existing_markers_checkbox = QCheckBox('Use existing page markers from retail ePubs when present')
-        self.existing_markers_checkbox.setChecked(plugin_prefs['use_existing_markers'])
-        self.existing_markers_checkbox.setToolTip(
-            'If the book already marks its print pages (epub:type="pagebreak" / role="doc-pagebreak" '
-            'markers, page ids such as "page_12", or an existing page-list), build the page-list from '
-            'those real page numbers instead of generating synthetic pages.')
-        layout.addWidget(self.existing_markers_checkbox)
-        fallback_layout = QHBoxLayout()
-        fallback_layout.setContentsMargins(24, 0, 0, 0)
-        self.fallback_checkbox = QCheckBox('Generate synthetic pages when a book has no markers')
-        self.fallback_checkbox.setChecked(plugin_prefs['existing_markers_fallback'])
-        self.fallback_checkbox.setToolTip(
-            'If ticked, books without page markers are paginated with the page count source above. '
-            'If not, they are skipped.')
-        fallback_layout.addWidget(self.fallback_checkbox)
-        layout.addLayout(fallback_layout)
-        self.existing_markers_checkbox.toggled.connect(self.fallback_checkbox.setEnabled)
-        self.fallback_checkbox.setEnabled(self.existing_markers_checkbox.isChecked())
+        # Existing print page markers: one radio button per mode
+        markers_box = QGroupBox('Existing page markers')
+        markers_box.setToolTip(
+            'Retail ePubs often already mark their print pages (epub:type="pagebreak" / role="doc-pagebreak" '
+            'markers, page ids such as "page_12", or an existing page-list).')
+        markers_layout = QVBoxLayout()
+        markers_box.setLayout(markers_layout)
+        self.markers_group = QButtonGroup(self)
+
+        self.markers_prefer_radio = QRadioButton('Use the book\'s page markers, generate pages if it has none')
+        self.markers_prefer_radio.setToolTip(
+            'Build the page-list from the book\'s real print page numbers when it has them. '
+            'Books without markers are paginated with the page count source above.')
+        self.markers_only_radio = QRadioButton('Use the book\'s page markers, skip books without them')
+        self.markers_only_radio.setToolTip(
+            'Only build page-lists from real print page numbers. Books without markers are skipped '
+            'and listed in the summary.')
+        self.markers_ignore_radio = QRadioButton('Ignore page markers, always generate pages')
+        self.markers_ignore_radio.setToolTip(
+            'Always paginate with the page count source above, even if the book has print page markers.')
+
+        self.markers_radios = {
+            MARKERS_PREFER: self.markers_prefer_radio,
+            MARKERS_ONLY: self.markers_only_radio,
+            MARKERS_IGNORE: self.markers_ignore_radio,
+        }
+        for radio in self.markers_radios.values():
+            self.markers_group.addButton(radio)
+            markers_layout.addWidget(radio)
+        self.markers_radios[get_existing_markers_mode()].setChecked(True)
+
+        layout.addWidget(markers_box)
 
         # Snap to paragraph setting
         self.snap_checkbox = QCheckBox('Snap to paragraph boundaries')
@@ -151,6 +176,15 @@ class ConfigWidget(QWidget):
                 return source
         return SOURCE_CHARS_PER_PAGE
 
+    def selected_markers_mode(self):
+        """
+        Return the existing page marker mode of the checked radio button.
+        """
+        for mode, radio in self.markers_radios.items():
+            if radio.isChecked():
+                return mode
+        return MARKERS_PREFER
+
     def update_source_inputs(self, *args):
         """
         Enable only the inputs that belong to the selected page count source.
@@ -171,8 +205,7 @@ class ConfigWidget(QWidget):
         plugin_prefs['snap_to_paragraph'] = self.snap_checkbox.isChecked()
         plugin_prefs['overwrite_existing'] = self.overwrite_checkbox.isChecked()
         plugin_prefs['page_count_source'] = source
-        plugin_prefs['use_existing_markers'] = self.existing_markers_checkbox.isChecked()
-        plugin_prefs['existing_markers_fallback'] = self.fallback_checkbox.isChecked()
+        plugin_prefs['existing_markers_mode'] = self.selected_markers_mode()
         # Kept in sync so an older plugin version still reads a sensible value
         plugin_prefs['use_custom_column'] = source == SOURCE_CUSTOM_COLUMN
         plugin_prefs['custom_column_name'] = self.column_input.text().strip()
