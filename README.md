@@ -70,7 +70,7 @@ calibre-customize -a epub3_pagelist.zip
 
 ## Configuration
 
-You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB3 Page List Generator** → **Customize plugin**:
+You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB3 Page List Generator** → **Customize plugin**, or straight from the toolbar: click the arrow next to the **Generate Page List** button and choose **Customize plugin…**. Both open the same settings.
 
 | Setting | Default | Description |
 |---|---|---|
