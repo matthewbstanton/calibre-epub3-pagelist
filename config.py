@@ -80,9 +80,10 @@ class ConfigWidget(QWidget):
         column_layout.addWidget(self.column_input)
         source_layout.addLayout(column_layout)
 
-        # Goodreads Id (not implemented yet in main.py)
+        # Goodreads Id
         self.goodreads_radio = QRadioButton('Use Goodreads Id')
-        self.goodreads_radio.setToolTip('Not implemented yet: books are skipped when this is selected.')
+        self.goodreads_radio.setToolTip('Fetch the page count from the book\'s Goodreads page, using the "goodreads" '
+                                        'identifier. Books without one, or whose page count can\'t be read, are skipped.')
         source_layout.addWidget(self.goodreads_radio)
 
         self.source_radios = {

@@ -13,6 +13,29 @@ from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
+from calibre_plugins.epub3_pagelist.core.goodreads import book_url, parse_page_count
+
+# Seconds to wait for a Goodreads book page before giving up on that book
+GOODREADS_TIMEOUT = 30
+
+def fetch_goodreads_page_count(goodreads_id):
+    """
+    Fetch the Goodreads book page for an ID and return (page_count, None),
+    or (None, reason) if the ID is invalid, the fetch fails or no count is found.
+    """
+    url = book_url(goodreads_id)
+    if not url:
+        return None, f'invalid Goodreads ID "{goodreads_id}"'
+    from calibre import browser
+    try:
+        br = browser()
+        raw = br.open_novisit(url, timeout=GOODREADS_TIMEOUT).read()
+    except Exception as e:
+        return None, f'could not fetch {url} ({e})'
+    page_count = parse_page_count(raw)
+    if not page_count:
+        return None, f'no page count found on {url}'
+    return page_count, None
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -62,17 +85,7 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
-        # Goodreads Id is selectable in settings but has no lookup yet, so skip every book
         page_count_source = get_page_count_source()
-        if page_count_source == SOURCE_GOODREADS_ID:
-            info_dialog(
-                self.gui,
-                'Not implemented yet',
-                f'Skipped {len(selected_ids)} book(s): the Goodreads Id page count source is not implemented yet.\n\n'
-                'Choose "Characters per page" or "Custom column" under "Page count source" in plugin preferences.',
-                show=True,
-            )
-            return
 
         db = self.gui.current_db
         processed_count = 0
@@ -81,6 +94,7 @@ class EPUB3PageListAction(InterfaceAction):
         error_count = 0
         error_details = []
         column_values = []
+        skipped_goodreads = []
         
         # 3. For each selected book
         for book_id in selected_ids:
@@ -137,6 +151,19 @@ class EPUB3PageListAction(InterfaceAction):
                     skipped_already_paginated += 1
                     continue
 
+                # Fetched after the overwrite check so skipped books cost no request
+                if page_count_source == SOURCE_GOODREADS_ID:
+                    title = db.new_api.field_for('title', book_id)
+                    identifiers = db.new_api.field_for('identifiers', book_id) or {}
+                    goodreads_id = identifiers.get('goodreads')
+                    if not goodreads_id:
+                        skipped_goodreads.append(f'{title}: no Goodreads ID in its identifiers')
+                        continue
+                    target_pages, reason = fetch_goodreads_page_count(goodreads_id)
+                    if not target_pages:
+                        skipped_goodreads.append(f'{title}: {reason}')
+                        continue
+
                 # f. Remove existing markers if overwriting
                 injector = MarkerInjector(container)
                 if overwrite:
@@ -187,21 +214,31 @@ class EPUB3PageListAction(InterfaceAction):
                 show=True,
             )
 
+        goodreads_note = ''
+        if skipped_goodreads:
+            goodreads_note = (f'Skipped {len(skipped_goodreads)} book(s) with no Goodreads page count:\n'
+                              + '\n'.join(f'    {n}' for n in skipped_goodreads))
+
         if error_count > 0:
+            msg = f'Encountered errors on {error_count} book(s). Click "Show details" for the full traceback.'
+            if goodreads_note:
+                msg += '\n\n' + goodreads_note
             error_dialog(
                 self.gui,
                 'Errors during processing',
-                f'Encountered errors on {error_count} book(s). Click "Show details" for the full traceback.',
+                msg,
                 det_msg='\n\n'.join(error_details),
                 show=True,
             )
-        elif processed_count > 0:
-            msg = f'Successfully generated page list for {processed_count} book(s).'
+        elif processed_count > 0 or skipped_goodreads:
             notes = []
             if skipped_already_paginated > 0:
                 notes.append(f'Skipped {skipped_already_paginated} book(s) that already had a page list (overwrite is disabled)')
             if skipped_non_epub3 > 0:
                 notes.append(f'Skipped {skipped_non_epub3} book(s) because they are not EPUB 3')
+            if goodreads_note:
+                notes.append(goodreads_note)
+            msg = f'Successfully generated page list for {processed_count} book(s).'
             if notes:
                 msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
             info_dialog(self.gui, 'Processing Complete', msg, show=True)

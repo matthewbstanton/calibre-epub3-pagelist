@@ -77,11 +77,13 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | **Page count source** | Characters per page | Radio group that picks how the page count is decided. See the options below. |
 | ↳ **Characters per page** | `1850` | Default option. Splits the book into pages of this many characters (based on standard Kindle pagination). The spin box is only enabled when this option is selected. |
 | ↳ **Custom column** | empty | Reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). Enter the column's lookup name, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. The name box is only enabled when this option is selected. |
-| ↳ **Use Goodreads Id** | — | Not implemented yet. When selected, the plugin skips every selected book and shows a dialog saying so. |
+| ↳ **Use Goodreads Id** | — | Looks up each book's `goodreads` identifier (as stored by the Goodreads metadata source plugin), fetches `https://www.goodreads.com/book/show/<id>` and generates a page-list with the page count shown there (or the closest count it can reach). Needs an internet connection. |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
 
 If you used the earlier **Use custom column for page count** checkbox, your setting carries over: if it was ticked, **Custom column** is selected.
+
+When **Use Goodreads Id** is selected, a book is skipped, and listed with the reason in the summary dialog, if it has no Goodreads ID, the page can't be fetched (each request times out after 30 seconds), or no page count can be found on it. The other books in the batch are still processed. Books that already have a page list with overwrite disabled are skipped before any request is made.
 
 When **Custom column** is selected, the plugin shows a dialog after processing listing the page count read for each book. A book whose column is empty or non-numeric, or a column name that doesn't exist, is reported as an error for that book.
 
