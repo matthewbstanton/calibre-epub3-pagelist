@@ -1,3 +1,5 @@
+Original repo https://github.com/Kaspyy/calibre-epub3-pagelist/
+
 # EPUB3 Page List Generator (Calibre Plugin)
 
 [![Unit Tests](https://github.com/Kaspyy/calibre-epub3-pagelist/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/Kaspyy/calibre-epub3-pagelist/actions/workflows/test.yml)
