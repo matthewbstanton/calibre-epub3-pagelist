@@ -25,7 +25,9 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - **EPUB 3 Navigation Document**: Injects `<nav epub:type="page-list">` with `doc-pagebreak` milestones into `nav.xhtml`.
   - **EPUB 2 NCX Fallback**: Injects `<pageList>` into `toc.ncx` (ensures page numbers work when sending EPUBs to Kindle via *Send to Kindle*).
   - **Adobe Page Map**: Generates `page-map.xml` for Adobe Digital Editions and legacy reading engines.
-  - **EPUB Accessibility Metadata**: Automatically adds `schema:accessibilityFeature` (`pageBreakMarkers`, `pageNavigation`) and `pageBreakSource: none` to the OPF package.
+  - **EPUB Accessibility Metadata**: Automatically adds `schema:accessibilityFeature` (`pageBreakMarkers`, `pageNavigation`) and, for synthetic pages, `pageBreakSource: none` to the OPF package.
+- **Real Print Pages When Available**:
+  - Retail EPUBs often already mark their print pages but lack a complete page-list. The plugin can build the page-list from those markers instead of generating synthetic pages.
 - **Smart Paragraph Snapping**:
   - Automatically aligns page breaks with paragraph/block boundaries to avoid breaking in the middle of sentences.
 - **Section-Aware Pagination**:
@@ -34,7 +36,7 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - Select one or dozens of books in your Calibre library and paginate them all in a single click.
 - **Safe & Non-Destructive**:
   - Automatically skips EPUB 2 files (shows informative summary after processing).
-  - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating.
+  - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating. Print page markers that came with the book are never removed.
 - **Customizable**:
   - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column, Goodreads ID or Amazon ID to set each book's page count.
 
@@ -81,12 +83,30 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Custom column** | empty | Reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). Enter the column's lookup name, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. The name box is only enabled when this option is selected. |
 | ↳ **Use Goodreads Id** | — | Looks up each book's `goodreads` identifier (as stored by the Goodreads metadata source plugin), fetches `https://www.goodreads.com/book/show/<id>` and generates a page-list with the page count shown there (or the closest count it can reach). Needs an internet connection. |
 | ↳ **Use Amazon Id** | — | Looks up each book's `amazon` identifier (the ASIN, as stored by Calibre's Amazon metadata source), fetches `https://www.amazon.com/dp/<ASIN>` and generates a page-list with the print length shown there (or the closest count it can reach). Only the `amazon` identifier is used; regional ones such as `amazon_uk` are ignored. Needs an internet connection. |
+| **Use existing page markers from retail ePubs when present** | `True` | If the book already marks its print pages, builds the page-list from those real page numbers and adds no synthetic markers. See [Existing page markers](#existing-page-markers). |
+| ↳ **Generate synthetic pages when a book has no markers** | `True` | Only used with the option above. If ticked, books without page markers are paginated with the page count source as usual. If not, they are skipped and listed in the summary dialog. |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
 
 If you used the earlier **Use custom column for page count** checkbox, your setting carries over: if it was ticked, **Custom column** is selected.
 
 When **Use Goodreads Id** or **Use Amazon Id** is selected, a book is skipped, and listed with the reason in the summary dialog, if it has no ID of that kind, the page can't be fetched (each request times out after 30 seconds), or no page count can be found on it. Amazon sometimes answers automated requests with a bot check page instead of the product page; those books are skipped with "no page count found", and "Show details" shows the response. The other books in the batch are still processed. Books that already have a page list with overwrite disabled are skipped before any request is made.
+
+### Existing page markers
+
+With **Use existing page markers from retail ePubs when present** ticked (the default), the plugin looks for print page markers before it paginates a book. It uses the first of these it finds:
+
+1. **An existing page-list**: a nav page-list, NCX `pageList` or `page-map.xml` whose links point at elements in the book. This completes a book that has only one or two of the three.
+2. **Page break markers**: elements with `epub:type="pagebreak"` or `role="doc-pagebreak"`, e.g. `<span epub:type="pagebreak" id="page_12" title="12"/>`. The page number comes from `aria-label`, `title` or the element's text. A marker without an `id` is given one (`page-12`).
+3. **Page-like ids**: empty `<a>` or `<span>` elements (or ones whose only text is the page number) with ids such as `page12`, `page_12`, `p12`, `pg12`, `Page_xii` or `pagexii`, including roman numerals for front matter. Only used when the book has no page break markers, and only if there are at least 10 of them and their numbers go up in reading order (arabic and roman numbers are checked separately), so that ordinary ids such as paragraph numbers aren't mistaken for pages.
+
+The nav page-list, NCX `pageList` and `page-map.xml` are then built from those markers, and no synthetic markers are added. Because the pages follow a print edition, `pageBreakSource: none` is not added (and an existing `none` is removed). The page count source isn't used for these books, so no web request is made for them.
+
+The **Overwrite existing page-list** setting still applies: with it off, a book that already has any page-list (even one of the three) is skipped. To complete a partial page-list, tick **Overwrite existing page-list**; the page-list is then rebuilt from the existing one.
+
+The default is on because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and with the fallback ticked a book without markers is paginated exactly as before. Untick the fallback if you only want page-lists for books with real print pages.
+
+Markers the plugin adds are tagged with `data-epub3-pagelist="synthetic"`, and only those (plus untagged markers from older plugin versions, recognised by their exact form and numbering) are removed when a page-list is regenerated.
 
 When **Custom column** is selected, the plugin shows a dialog after processing listing the page count read for each book. A book whose column is empty or non-numeric, or a column name that doesn't exist, is reported as an error for that book.
 

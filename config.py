@@ -11,6 +11,11 @@ plugin_prefs.defaults['chars_per_page'] = 1850
 plugin_prefs.defaults['snap_to_paragraph'] = True
 plugin_prefs.defaults['overwrite_existing'] = False
 plugin_prefs.defaults['page_count_source'] = SOURCE_CHARS_PER_PAGE
+# Build the page-list from print page markers already in the book, when it has them
+plugin_prefs.defaults['use_existing_markers'] = True
+# With use_existing_markers: True paginates books without markers using the
+# page count source, False skips them
+plugin_prefs.defaults['existing_markers_fallback'] = True
 # Superseded by 'page_count_source'; still read to migrate older settings
 plugin_prefs.defaults['use_custom_column'] = False
 plugin_prefs.defaults['custom_column_name'] = ''
@@ -103,6 +108,26 @@ class ConfigWidget(QWidget):
 
         layout.addWidget(source_box)
 
+        # Existing print page markers
+        self.existing_markers_checkbox = QCheckBox('Use existing page markers from retail ePubs when present')
+        self.existing_markers_checkbox.setChecked(plugin_prefs['use_existing_markers'])
+        self.existing_markers_checkbox.setToolTip(
+            'If the book already marks its print pages (epub:type="pagebreak" / role="doc-pagebreak" '
+            'markers, page ids such as "page_12", or an existing page-list), build the page-list from '
+            'those real page numbers instead of generating synthetic pages.')
+        layout.addWidget(self.existing_markers_checkbox)
+        fallback_layout = QHBoxLayout()
+        fallback_layout.setContentsMargins(24, 0, 0, 0)
+        self.fallback_checkbox = QCheckBox('Generate synthetic pages when a book has no markers')
+        self.fallback_checkbox.setChecked(plugin_prefs['existing_markers_fallback'])
+        self.fallback_checkbox.setToolTip(
+            'If ticked, books without page markers are paginated with the page count source above. '
+            'If not, they are skipped.')
+        fallback_layout.addWidget(self.fallback_checkbox)
+        layout.addLayout(fallback_layout)
+        self.existing_markers_checkbox.toggled.connect(self.fallback_checkbox.setEnabled)
+        self.fallback_checkbox.setEnabled(self.existing_markers_checkbox.isChecked())
+
         # Snap to paragraph setting
         self.snap_checkbox = QCheckBox('Snap to paragraph boundaries')
         self.snap_checkbox.setChecked(plugin_prefs['snap_to_paragraph'])
@@ -146,6 +171,8 @@ class ConfigWidget(QWidget):
         plugin_prefs['snap_to_paragraph'] = self.snap_checkbox.isChecked()
         plugin_prefs['overwrite_existing'] = self.overwrite_checkbox.isChecked()
         plugin_prefs['page_count_source'] = source
+        plugin_prefs['use_existing_markers'] = self.existing_markers_checkbox.isChecked()
+        plugin_prefs['existing_markers_fallback'] = self.fallback_checkbox.isChecked()
         # Kept in sync so an older plugin version still reads a sensible value
         plugin_prefs['use_custom_column'] = source == SOURCE_CUSTOM_COLUMN
         plugin_prefs['custom_column_name'] = self.column_input.text().strip()

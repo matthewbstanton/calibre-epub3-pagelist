@@ -12,6 +12,7 @@ from calibre_plugins.epub3_pagelist.config import plugin_prefs, get_page_count_s
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
+from calibre_plugins.epub3_pagelist.core.existing_markers import ExistingMarkerDetector
 from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
 from calibre_plugins.epub3_pagelist.fetcher import CalibreFetcher
 
@@ -64,6 +65,8 @@ class EPUB3PageListAction(InterfaceAction):
             return
         
         page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
+        use_existing_markers = plugin_prefs['use_existing_markers']
+        existing_markers_fallback = plugin_prefs['existing_markers_fallback']
 
         db = self.gui.current_db
         processed_count = 0
@@ -72,6 +75,7 @@ class EPUB3PageListAction(InterfaceAction):
         error_count = 0
         error_details = []
         skipped_no_page_count = []
+        skipped_no_markers = []
         skipped_details = []
         page_counts = []
 
@@ -124,45 +128,61 @@ class EPUB3PageListAction(InterfaceAction):
                     skipped_already_paginated += 1
                     continue
 
-                # Asked after the overwrite check so skipped books cost no web request
-                page_count = page_count_source.get_page_count(db.new_api, book_id)
-                if page_count.skipped:
-                    title = db.new_api.field_for('title', book_id)
-                    skipped_no_page_count.append(f'{title}: {page_count.skip_reason}')
-                    if page_count.details:
-                        skipped_details.append(f'Book: {title} (ID {book_id})\n{page_count.details}\n' + '-' * 40)
-                    continue
-                target_pages = page_count.pages
-
-                # f. Remove existing markers if overwriting
+                # f. Remove the plugin's own markers if overwriting.
+                # Print page markers that came with the book are never removed.
                 injector = MarkerInjector(container)
                 if overwrite:
                     injector.remove_existing_markers()
 
-                # g. Run Paginator
-                paginator = Paginator(container, config)
-                pages = paginator.fit_to_page_count(target_pages) if target_pages else paginator.paginate()
+                # g. Use the book's own print page markers if it has them
+                pages = None
+                target_pages = None
+                if use_existing_markers:
+                    detection = ExistingMarkerDetector(container).detect()
+                    if detection.found:
+                        pages = detection.markers
+                    elif not existing_markers_fallback:
+                        skipped_no_markers.append(db.new_api.field_for('title', book_id))
+                        continue
 
-                if not pages:
-                    continue
+                from_markers = pages is not None
+                if not from_markers:
+                    # Asked after the overwrite check so skipped books cost no web request
+                    page_count = page_count_source.get_page_count(db.new_api, book_id)
+                    if page_count.skipped:
+                        title = db.new_api.field_for('title', book_id)
+                        skipped_no_page_count.append(f'{title}: {page_count.skip_reason}')
+                        if page_count.details:
+                            skipped_details.append(f'Book: {title} (ID {book_id})\n{page_count.details}\n' + '-' * 40)
+                        continue
+                    target_pages = page_count.pages
 
-                # h. Inject page break markers
-                injector.inject_markers(pages)
+                    # h. Run Paginator
+                    paginator = Paginator(container, config)
+                    pages = paginator.fit_to_page_count(target_pages) if target_pages else paginator.paginate()
 
-                # i. Run NavBuilder
-                nav_builder.build_page_list(pages, overwrite=overwrite)
+                    if not pages:
+                        continue
 
-                # j. Commit changes
+                    # i. Inject page break markers
+                    injector.inject_markers(pages)
+
+                # j. Run NavBuilder
+                nav_builder.build_page_list(pages, overwrite=overwrite, synthetic=not from_markers)
+
+                # k. Commit changes
                 container.commit()
 
-                # k. Save back to library if working with temp copy
+                # l. Save back to library if working with temp copy
                 if temp_file_used and temp_file_path:
                     with open(temp_file_path, 'rb') as f:
                         db.new_api.set_format(book_id, 'EPUB', f)
 
                 processed_count += 1
                 title = db.new_api.field_for('title', book_id)
-                if target_pages and target_pages != len(pages):
+                if from_markers:
+                    page_counts.append(f"{title}: {len(pages)} pages (from the book's page markers)")
+                elif target_pages and target_pages != len(pages):
                     page_counts.append(f'{title}: {len(pages)} pages (target {target_pages})')
                 else:
                     page_counts.append(f'{title}: {len(pages)} pages')
@@ -189,6 +209,11 @@ class EPUB3PageListAction(InterfaceAction):
             page_count_note = (f'Skipped {len(skipped_no_page_count)} book(s) with no page count:\n'
                                + '\n'.join(f'    {n}' for n in skipped_no_page_count))
 
+        if skipped_no_markers:
+            markers_note = (f'Skipped {len(skipped_no_markers)} book(s) with no page markers:\n'
+                            + '\n'.join(f'    {t}' for t in skipped_no_markers))
+            page_count_note = page_count_note + '\n' + markers_note if page_count_note else markers_note
+
         page_counts_note = '\n'.join(f'    {c}' for c in page_counts)
 
         if error_count > 0:
@@ -204,7 +229,7 @@ class EPUB3PageListAction(InterfaceAction):
                 det_msg='\n\n'.join(error_details + skipped_details),
                 show=True,
             )
-        elif processed_count > 0 or skipped_no_page_count:
+        elif processed_count > 0 or skipped_no_page_count or skipped_no_markers:
             notes = []
             if skipped_already_paginated > 0:
                 notes.append(f'Skipped {skipped_already_paginated} book(s) that already had a page list (overwrite is disabled)')
