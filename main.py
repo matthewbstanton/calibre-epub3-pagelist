@@ -13,29 +13,43 @@ from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_
 from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.goodreads import book_url, parse_page_count
+from calibre_plugins.epub3_pagelist.core.goodreads import (book_url, parse_page_count, is_bot_challenge,
+                                                     has_waf_challenge_header)
 
 # Seconds to wait for a Goodreads book page before giving up on that book
 GOODREADS_TIMEOUT = 30
+GOODREADS_BLOCKED_REASON = 'Goodreads blocked the request with a bot check; try again later'
 
 def fetch_goodreads_page_count(goodreads_id):
     """
-    Fetch the Goodreads book page for an ID and return (page_count, None),
-    or (None, reason) if the ID is invalid, the fetch fails or no count is found.
+    Fetch the Goodreads book page for an ID.
+    Returns (page_count, None, False) on success, or (None, reason, blocked)
+    where blocked is True if Goodreads answered with a bot check.
+    The challenge is only detected and reported, never answered or retried.
     """
     url = book_url(goodreads_id)
     if not url:
-        return None, f'invalid Goodreads ID "{goodreads_id}"'
+        return None, f'invalid Goodreads ID "{goodreads_id}"', False
     from calibre import browser
     try:
         br = browser()
-        raw = br.open_novisit(url, timeout=GOODREADS_TIMEOUT).read()
+        response = br.open_novisit(url, timeout=GOODREADS_TIMEOUT)
+        status = getattr(response, 'code', None)
+        headers = response.info()
+        raw = response.read()
     except Exception as e:
-        return None, f'could not fetch {url} ({e})'
+        # An HTTP error status (e.g. 405) may also carry the WAF challenge header.
+        # Only the header counts here: a 404 page is small too, but is not a bot check.
+        info = getattr(e, 'info', None)
+        if callable(info) and has_waf_challenge_header(info()):
+            return None, GOODREADS_BLOCKED_REASON, True
+        return None, f'could not fetch {url} ({e})', False
+    if is_bot_challenge(status, headers, raw):
+        return None, GOODREADS_BLOCKED_REASON, True
     page_count = parse_page_count(raw)
     if not page_count:
-        return None, f'no page count found on {url}'
-    return page_count, None
+        return None, f'no page count found on {url}', False
+    return page_count, None, False
 
 class EPUB3PageListAction(InterfaceAction):
     """
@@ -95,6 +109,7 @@ class EPUB3PageListAction(InterfaceAction):
         error_details = []
         column_values = []
         skipped_goodreads = []
+        goodreads_blocked = False
         
         # 3. For each selected book
         for book_id in selected_ids:
@@ -159,7 +174,11 @@ class EPUB3PageListAction(InterfaceAction):
                     if not goodreads_id:
                         skipped_goodreads.append(f'{title}: no Goodreads ID in its identifiers')
                         continue
-                    target_pages, reason = fetch_goodreads_page_count(goodreads_id)
+                    if goodreads_blocked:
+                        # Goodreads already showed a bot check this run; don't send more requests
+                        skipped_goodreads.append(f'{title}: {GOODREADS_BLOCKED_REASON}')
+                        continue
+                    target_pages, reason, goodreads_blocked = fetch_goodreads_page_count(goodreads_id)
                     if not target_pages:
                         skipped_goodreads.append(f'{title}: {reason}')
                         continue
