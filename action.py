@@ -10,10 +10,11 @@ from calibre_plugins.epub3_pagelist.utils import get_icons
 
 from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_source, get_existing_markers_mode,
                                                     MARKERS_ONLY, MARKERS_IGNORE)
-from calibre_plugins.epub3_pagelist.core.paginator import Paginator, PaginationConfig
+from calibre_plugins.epub3_pagelist.core.paginator import PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
-from calibre_plugins.epub3_pagelist.core.existing_markers import ExistingMarkerDetector
+from calibre_plugins.epub3_pagelist.core.page_planner import (plan_pages, PLAN_EXISTING, PLAN_NO_MARKERS,
+                                                              PLAN_NO_PAGE_COUNT, PLAN_EMPTY)
 from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
 from calibre_plugins.epub3_pagelist.core.page_count_column import (normalize_column_name, column_write_problem,
                                                                    column_value)
@@ -43,10 +44,18 @@ class EPUB3PageListAction(InterfaceAction):
         menu = QMenu(self.gui)
         self.create_menu_action(menu, 'epub3-pagelist-generate', 'Generate Page List',
                                 icon=icon, shortcut=False, triggered=self.generate_page_list)
+        self.save_count_action = self.create_menu_action(
+            menu, 'epub3-pagelist-save-count', 'Save page count to column',
+            shortcut=False, triggered=self.save_page_count_to_column,
+            description='Write the page count of the selected books to the custom column set in the '
+                        'settings, without changing the books')
         menu.addSeparator()
         self.create_menu_action(menu, 'epub3-pagelist-customize', 'Customize plugin…',
                                 icon='config.png', shortcut=False, triggered=self.show_configuration)
         self.qaction.setMenu(menu)
+        # The setting can change at any time, so check it each time the menu opens
+        menu.aboutToShow.connect(self.update_menu_state)
+        self.update_menu_state()
 
     def show_configuration(self):
         """
@@ -54,6 +63,58 @@ class EPUB3PageListAction(InterfaceAction):
         do_user_config() calls config_widget() and save_settings() from __init__.py.
         """
         self.interface_action_base_plugin.do_user_config(self.gui)
+        self.update_menu_state()
+
+    def update_menu_state(self):
+        """
+        Enable "Save page count to column" only while the setting is ticked.
+        Called before the menu shows and after the settings are saved, so a
+        change takes effect without restarting Calibre.
+        """
+        self.save_count_action.setEnabled(bool(plugin_prefs['save_page_count']))
+
+    def _settings(self):
+        """
+        Read the settings that plan_pages() needs.
+        Returns (page_count_source, pagination config, overwrite, use_markers, markers_only).
+        """
+        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
+        markers_mode = get_existing_markers_mode()
+        config = PaginationConfig(
+            chars_per_page=plugin_prefs['chars_per_page'],
+            snap_to_paragraph=plugin_prefs['snap_to_paragraph']
+        )
+        return (page_count_source, config, plugin_prefs['overwrite_existing'],
+                markers_mode != MARKERS_IGNORE, markers_mode == MARKERS_ONLY)
+
+    @staticmethod
+    def _epub_path(db, book_id):
+        """
+        Return (path, temp_file_path) of the book's EPUB, or (None, None) if it has none.
+        temp_file_path is set when the library gave a temporary copy; the
+        caller must save it back (if changed) and delete it.
+        """
+        if not db.new_api.has_format(book_id, 'EPUB'):
+            return None, None
+        epub_path = db.new_api.format_abspath(book_id, 'EPUB')
+        if epub_path:
+            return epub_path, None
+        # If absolute path is not available, use format to get a temp copy
+        temp_file_path = db.new_api.format(book_id, 'EPUB', as_path=True)
+        return temp_file_path, temp_file_path
+
+    @staticmethod
+    def _is_epub3(container):
+        """
+        Return True if the container's OPF is version 3 or later.
+        """
+        opf_version = getattr(container.opf_version_parsed, 'major', None) if hasattr(container, 'opf_version_parsed') else None
+        if opf_version is None:
+            try:
+                opf_version = int(float(str(getattr(container, 'opf_version', '2.0'))))
+            except Exception:
+                opf_version = 2
+        return opf_version >= 3
 
     def generate_page_list(self):
         """
@@ -67,8 +128,7 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
             return
         
-        page_count_source = create_page_count_source(get_page_count_source(), plugin_prefs, CalibreFetcher().fetch)
-        markers_mode = get_existing_markers_mode()
+        page_count_source, config, overwrite, use_markers, markers_only = self._settings()
 
         db = self.gui.current_db
         processed_count = 0
@@ -85,104 +145,60 @@ class EPUB3PageListAction(InterfaceAction):
 
         # 3. For each selected book
         for book_id in selected_ids:
-            temp_file_used = False
             temp_file_path = None
             try:
-                # a. Check if EPUB format exists in library
-                if not db.new_api.has_format(book_id, 'EPUB'):
-                    continue
-                
-                # b. Get the EPUB file path
-                epub_path = db.new_api.format_abspath(book_id, 'EPUB')
-
-                if not epub_path:
-                    # If absolute path is not available, use format to get a temp copy
-                    temp_file_path = db.new_api.format(book_id, 'EPUB', as_path=True)
-                    epub_path = temp_file_path
-                    temp_file_used = True
-
+                # a. Get the EPUB file path, skipping books without an EPUB
+                epub_path, temp_file_path = self._epub_path(db, book_id)
                 if not epub_path:
                     continue
 
-                # c. Open with get_container
+                # b. Open with get_container
                 container = get_container(epub_path, tweak_mode=True)
                 
-                # d. Check EPUB version (skip if not EPUB3)
-                opf_version = getattr(container.opf_version_parsed, 'major', None) if hasattr(container, 'opf_version_parsed') else None
-                if opf_version is None:
-                    try:
-                        opf_version = int(float(str(getattr(container, 'opf_version', '2.0'))))
-                    except Exception:
-                        opf_version = 2
-
-                if opf_version < 3:
+                # c. Check EPUB version (skip if not EPUB3)
+                if not self._is_epub3(container):
                     skipped_non_epub3 += 1
                     continue
-                
-                # e. Load config
-                overwrite = plugin_prefs['overwrite_existing']
-                config = PaginationConfig(
-                    chars_per_page=plugin_prefs['chars_per_page'],
-                    snap_to_paragraph=plugin_prefs['snap_to_paragraph']
-                )
 
-                # Check if book already has page-list and overwrite is disabled
-                nav_builder = NavBuilder(container)
-                if not overwrite and nav_builder.has_existing_page_list():
+                # d. Work out the pages: an existing page-list, the book's own
+                # print page markers, or pages from the page count source
+                plan = plan_pages(container, page_count_source, db.new_api, book_id, config,
+                                  overwrite, use_markers=use_markers, markers_only=markers_only)
+
+                if plan.outcome == PLAN_EXISTING:
                     skipped_already_paginated += 1
                     # Still save the existing page-list's count to the column
-                    existing_count = nav_builder.existing_page_count()
-                    if existing_count:
-                        saved_page_counts[book_id] = existing_count
+                    if plan.page_count:
+                        saved_page_counts[book_id] = plan.page_count
+                    continue
+                if plan.outcome == PLAN_NO_MARKERS:
+                    skipped_no_markers.append(db.new_api.field_for('title', book_id))
+                    continue
+                if plan.outcome == PLAN_NO_PAGE_COUNT:
+                    title = db.new_api.field_for('title', book_id)
+                    skipped_no_page_count.append(f'{title}: {plan.source_result.skip_reason}')
+                    if plan.source_result.details:
+                        skipped_details.append(f'Book: {title} (ID {book_id})\n{plan.source_result.details}\n' + '-' * 40)
+                    continue
+                if plan.outcome == PLAN_EMPTY:
                     continue
 
-                # f. Remove the plugin's own markers if overwriting.
-                # Print page markers that came with the book are never removed.
-                injector = MarkerInjector(container)
-                if overwrite:
-                    injector.remove_existing_markers()
+                pages = plan.pages
+                from_markers = plan.from_markers
+                target_pages = plan.target_pages
 
-                # g. Use the book's own print page markers if it has them
-                pages = None
-                target_pages = None
-                if markers_mode != MARKERS_IGNORE:
-                    detection = ExistingMarkerDetector(container).detect()
-                    if detection.found:
-                        pages = detection.markers
-                    elif markers_mode == MARKERS_ONLY:
-                        skipped_no_markers.append(db.new_api.field_for('title', book_id))
-                        continue
-
-                from_markers = pages is not None
+                # e. Inject page break markers
                 if not from_markers:
-                    # Asked after the overwrite check so skipped books cost no web request
-                    page_count = page_count_source.get_page_count(db.new_api, book_id)
-                    if page_count.skipped:
-                        title = db.new_api.field_for('title', book_id)
-                        skipped_no_page_count.append(f'{title}: {page_count.skip_reason}')
-                        if page_count.details:
-                            skipped_details.append(f'Book: {title} (ID {book_id})\n{page_count.details}\n' + '-' * 40)
-                        continue
-                    target_pages = page_count.pages
+                    MarkerInjector(container).inject_markers(pages)
 
-                    # h. Run Paginator
-                    paginator = Paginator(container, config)
-                    pages = paginator.fit_to_page_count(target_pages) if target_pages else paginator.paginate()
+                # f. Run NavBuilder
+                NavBuilder(container).build_page_list(pages, overwrite=overwrite, synthetic=not from_markers)
 
-                    if not pages:
-                        continue
-
-                    # i. Inject page break markers
-                    injector.inject_markers(pages)
-
-                # j. Run NavBuilder
-                nav_builder.build_page_list(pages, overwrite=overwrite, synthetic=not from_markers)
-
-                # k. Commit changes
+                # g. Commit changes
                 container.commit()
 
-                # l. Save back to library if working with temp copy
-                if temp_file_used and temp_file_path:
+                # h. Save back to library if working with temp copy
+                if temp_file_path:
                     with open(temp_file_path, 'rb') as f:
                         db.new_api.set_format(book_id, 'EPUB', f)
 
@@ -202,7 +218,7 @@ class EPUB3PageListAction(InterfaceAction):
                 title = db.new_api.title(book_id) if hasattr(db.new_api, 'title') else f"ID {book_id}"
                 error_details.append(f"Book: {title} (ID {book_id})\nError: {e}\n{tb}\n" + "-" * 40)
             finally:
-                if temp_file_used and temp_file_path:
+                if temp_file_path:
                     try:
                         os.remove(temp_file_path)
                     except Exception:
@@ -277,6 +293,113 @@ class EPUB3PageListAction(InterfaceAction):
             )
         else:
             info_dialog(self.gui, 'Processing Complete', 'No EPUB files found among the selected books.', show=True)
+
+    def save_page_count_to_column(self):
+        """
+        Menu action: work out each selected book's page count, the same way
+        generate_page_list() does, and only write it to the custom column.
+        The EPUB is opened read-only in effect: the container is never
+        committed, so no markers, page-list or metadata are added.
+        """
+        if not plugin_prefs['save_page_count']:
+            info_dialog(self.gui, 'Saving page counts is disabled',
+                        'Tick "Save page count to column" in the plugin settings and enter a column name.',
+                        show=True)
+            return
+
+        selected_ids = self.gui.library_view.get_selected_ids()
+        if not selected_ids:
+            info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
+            return
+
+        page_count_source, config, overwrite, use_markers, markers_only = self._settings()
+
+        db = self.gui.current_db
+        page_counts = {}
+        counted = []
+        skipped = []
+        skipped_details = []
+        error_details = []
+        skipped_no_epub = 0
+        skipped_non_epub3 = 0
+
+        for book_id in selected_ids:
+            temp_file_path = None
+            title = db.new_api.field_for('title', book_id)
+            try:
+                epub_path, temp_file_path = self._epub_path(db, book_id)
+                if not epub_path:
+                    skipped_no_epub += 1
+                    continue
+
+                container = get_container(epub_path, tweak_mode=True)
+                if not self._is_epub3(container):
+                    skipped_non_epub3 += 1
+                    continue
+
+                plan = plan_pages(container, page_count_source, db.new_api, book_id, config,
+                                  overwrite, use_markers=use_markers, markers_only=markers_only)
+                if plan.page_count:
+                    page_counts[book_id] = plan.page_count
+                    if plan.outcome == PLAN_EXISTING:
+                        counted.append(f'{title}: {plan.page_count} pages (existing page list)')
+                    elif plan.from_markers:
+                        counted.append(f"{title}: {plan.page_count} pages (from the book's page markers)")
+                    else:
+                        counted.append(f'{title}: {plan.page_count} pages')
+                elif plan.outcome == PLAN_NO_MARKERS:
+                    skipped.append(f'{title}: no page markers')
+                elif plan.outcome == PLAN_NO_PAGE_COUNT:
+                    skipped.append(f'{title}: {plan.source_result.skip_reason}')
+                    if plan.source_result.details:
+                        skipped_details.append(f'Book: {title} (ID {book_id})\n{plan.source_result.details}\n' + '-' * 40)
+                else:
+                    skipped.append(f'{title}: no pages')
+            except Exception as e:
+                tb = traceback.format_exc()
+                error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
+            finally:
+                # Never saved back: this action doesn't change the book
+                if temp_file_path:
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
+
+        save_note = self.save_page_counts(db, page_counts)
+
+        summary = page_count_source.summary()
+        if summary:
+            info_dialog(self.gui, summary[0], summary[1], show=True)
+
+        notes = []
+        if save_note:
+            notes.append(save_note)
+        if skipped:
+            notes.append(f'Skipped {len(skipped)} book(s) with no page count:\n'
+                         + '\n'.join(f'    {n}' for n in skipped))
+        if skipped_non_epub3:
+            notes.append(f'Skipped {skipped_non_epub3} book(s) because they are not EPUB 3')
+        if skipped_no_epub:
+            notes.append(f'Skipped {skipped_no_epub} book(s) with no EPUB format')
+
+        if page_counts:
+            msg = f'Found the page count of {len(page_counts)} book(s):\n' + '\n'.join(f'    {c}' for c in counted)
+        else:
+            msg = 'No page counts were found for the selected books.'
+        if notes:
+            msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
+
+        if error_details:
+            msg = (f'Encountered errors on {len(error_details)} book(s). '
+                   'Click "Show details" for the full traceback.\n\n' + msg)
+            error_dialog(self.gui, 'Errors while saving page counts', msg,
+                         det_msg='\n\n'.join(error_details + skipped_details), show=True)
+        else:
+            if skipped_details:
+                msg += '\n\nClick "Show details" to see the responses for skipped books.'
+            info_dialog(self.gui, 'Save Page Count to Column', msg,
+                        det_msg='\n\n'.join(skipped_details), show=True)
 
     def save_page_counts(self, db, page_counts):
         """

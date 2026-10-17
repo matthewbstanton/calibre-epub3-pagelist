@@ -70,6 +70,16 @@ calibre-customize -a epub3_pagelist.zip
    - Any skipped non-EPUB3 or already-paginated titles
    - Any errors encountered (with full tracebacks available)
 
+### Toolbar menu
+
+Click the arrow next to the **Generate Page List** button for more options:
+
+| Menu entry | What it does |
+|---|---|
+| **Generate Page List** | The same as clicking the button. |
+| **Save page count to column** | Only saves page counts: works out each selected book's page count and writes it to the column set in **Save page count to column**, without changing the books. No page markers, page-list, NCX `pageList`, `page-map.xml` or metadata are added. The count is the one **Generate Page List** would save: the entries of an existing page-list (when **Overwrite existing page-list** is off), the book's own page markers, or the number of pages generated from the page count source. A summary lists the count found for each book and any books skipped. This entry is only enabled while **Save page count to column** is ticked in the settings; changing the setting takes effect the next time you open the menu. |
+| **Customize plugin…** | Opens the plugin settings. |
+
 ---
 
 ## Configuration
