@@ -19,6 +19,9 @@ plugin_prefs.defaults['overwrite_existing'] = False
 plugin_prefs.defaults['page_count_source'] = SOURCE_CHARS_PER_PAGE
 # What to do with print page markers already in the book, one of EXISTING_MARKERS_MODES
 plugin_prefs.defaults['existing_markers_mode'] = MARKERS_PREFER
+# Save each processed book's final page count to this custom column
+plugin_prefs.defaults['save_page_count'] = False
+plugin_prefs.defaults['save_page_count_column'] = ''
 # Superseded by 'page_count_source'; still read to migrate older settings
 plugin_prefs.defaults['use_custom_column'] = False
 plugin_prefs.defaults['custom_column_name'] = ''
@@ -165,6 +168,23 @@ class ConfigWidget(QWidget):
         self.overwrite_checkbox.setToolTip('Overwrite page-list if it already exists in the EPUB.')
         layout.addWidget(self.overwrite_checkbox)
 
+        # Save page count to a custom column; the name box is only enabled when ticked
+        save_layout = QHBoxLayout()
+        self.save_count_checkbox = QCheckBox('Save page count to column:')
+        self.save_count_checkbox.setChecked(plugin_prefs['save_page_count'])
+        self.save_count_checkbox.setToolTip(
+            'After a book is processed, write its number of pages to a custom column. '
+            'Skipped books are not written.')
+        self.save_column_input = QLineEdit()
+        self.save_column_input.setText(plugin_prefs['save_page_count_column'])
+        self.save_column_input.setPlaceholderText('e.g., #pages')
+        self.save_column_input.setToolTip('Lookup name of an integer, floating point or text custom column (e.g., #pages)')
+        save_layout.addWidget(self.save_count_checkbox)
+        save_layout.addWidget(self.save_column_input)
+        layout.addLayout(save_layout)
+        self.save_count_checkbox.toggled.connect(self.save_column_input.setEnabled)
+        self.save_column_input.setEnabled(self.save_count_checkbox.isChecked())
+
         layout.addStretch(1)
 
     def selected_source(self):
@@ -206,6 +226,8 @@ class ConfigWidget(QWidget):
         plugin_prefs['overwrite_existing'] = self.overwrite_checkbox.isChecked()
         plugin_prefs['page_count_source'] = source
         plugin_prefs['existing_markers_mode'] = self.selected_markers_mode()
+        plugin_prefs['save_page_count'] = self.save_count_checkbox.isChecked()
+        plugin_prefs['save_page_count_column'] = self.save_column_input.text().strip()
         # Kept in sync so an older plugin version still reads a sensible value
         plugin_prefs['use_custom_column'] = source == SOURCE_CUSTOM_COLUMN
         plugin_prefs['custom_column_name'] = self.column_input.text().strip()
