@@ -89,6 +89,7 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Ignore page markers, always generate pages** | — | Always paginates with the page count source, as earlier versions did. |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
+| **Save page count to column** | Off, empty | If ticked, writes each processed book's final page count to the custom column named in the box beside it, e.g. `#pages` (the leading `#` is optional). The count is the number of pages in the generated page-list, or in the book's own page markers if those were used. The column must be an integer, floating point or single-value text column. Skipped books are not written. The name box is only enabled when the checkbox is ticked. |
 
 If you used the earlier **Use custom column for page count** checkbox, your setting carries over: if it was ticked, **Custom column** is selected.
 
@@ -109,6 +110,8 @@ The **Overwrite existing page-list** setting is checked before any of this: with
 The default uses the book's markers because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and a book without markers is paginated exactly as before. Select **Use the book's page markers, skip books without them** if you only want page-lists for books with real print pages.
 
 Markers the plugin adds are tagged with `data-epub3-pagelist="synthetic"`, and only those (plus untagged markers from older plugin versions, recognised by their exact form and numbering) are removed when a page-list is regenerated.
+
+If **Save page count to column** is ticked but the column doesn't exist or is of a type that can't hold a page count, nothing is saved and the summary dialog says why; the page-lists are still generated. Saving to the same column that **Custom column** reads from replaces the target count with the number of pages actually generated.
 
 When **Custom column** is selected, the plugin shows a dialog after processing listing the page count read for each book. A book whose column is empty or non-numeric, or a column name that doesn't exist, is reported as an error for that book.
 

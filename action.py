@@ -15,6 +15,8 @@ from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
 from calibre_plugins.epub3_pagelist.core.existing_markers import ExistingMarkerDetector
 from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
+from calibre_plugins.epub3_pagelist.core.page_count_column import (normalize_column_name, column_write_problem,
+                                                                   column_value)
 from calibre_plugins.epub3_pagelist.fetcher import CalibreFetcher
 
 class EPUB3PageListAction(InterfaceAction):
@@ -78,6 +80,8 @@ class EPUB3PageListAction(InterfaceAction):
         skipped_no_markers = []
         skipped_details = []
         page_counts = []
+        # Final page count of each processed book, saved to the column after the loop
+        saved_page_counts = {}
 
         # 3. For each selected book
         for book_id in selected_ids:
@@ -179,6 +183,7 @@ class EPUB3PageListAction(InterfaceAction):
                         db.new_api.set_format(book_id, 'EPUB', f)
 
                 processed_count += 1
+                saved_page_counts[book_id] = len(pages)
                 title = db.new_api.field_for('title', book_id)
                 if from_markers:
                     page_counts.append(f"{title}: {len(pages)} pages (from the book's page markers)")
@@ -199,7 +204,10 @@ class EPUB3PageListAction(InterfaceAction):
                     except Exception:
                         pass
         
-        # 4. Show completion dialog
+        # 4. Save the page counts to the custom column, if enabled
+        save_note = self.save_page_counts(db, saved_page_counts)
+
+        # 5. Show completion dialog
         summary = page_count_source.summary()
         if summary:
             info_dialog(self.gui, summary[0], summary[1], show=True)
@@ -222,6 +230,8 @@ class EPUB3PageListAction(InterfaceAction):
                 msg += f'\n\nGenerated page list for {processed_count} book(s):\n' + page_counts_note
             if page_count_note:
                 msg += '\n\n' + page_count_note
+            if save_note:
+                msg += '\n\n' + save_note
             error_dialog(
                 self.gui,
                 'Errors during processing',
@@ -237,6 +247,8 @@ class EPUB3PageListAction(InterfaceAction):
                 notes.append(f'Skipped {skipped_non_epub3} book(s) because they are not EPUB 3')
             if page_count_note:
                 notes.append(page_count_note)
+            if save_note:
+                notes.append(save_note)
             msg = f'Successfully generated page list for {processed_count} book(s).'
             if page_counts:
                 msg += '\n' + page_counts_note
@@ -262,3 +274,38 @@ class EPUB3PageListAction(InterfaceAction):
             )
         else:
             info_dialog(self.gui, 'Processing Complete', 'No EPUB files found among the selected books.', show=True)
+
+    def save_page_counts(self, db, page_counts):
+        """
+        Write each processed book's page count to the custom column set in the
+        settings, in one batch. ``page_counts`` maps book id to page count.
+        Returns a note for the summary dialog, or None if saving is disabled
+        or there is nothing to save.
+        """
+        if not plugin_prefs['save_page_count'] or not page_counts:
+            return None
+        column = normalize_column_name(plugin_prefs['save_page_count_column'])
+        if column is None:
+            return 'Page counts were not saved: no column name is set'
+
+        try:
+            field_metadata = db.new_api.field_metadata
+            metadata = field_metadata[column] if column in field_metadata else None
+        except Exception:
+            metadata = None
+        problem = column_write_problem(column, metadata)
+        if problem:
+            return f'Page counts were not saved: {problem}'
+
+        try:
+            db.new_api.set_field(column, {book_id: column_value(metadata, pages)
+                                          for book_id, pages in page_counts.items()})
+        except Exception as e:
+            return f"Page counts were not saved to '{column}': {e}"
+
+        # Show the new values in the book list
+        try:
+            self.gui.library_view.model().refresh_ids(list(page_counts))
+        except Exception:
+            pass
+        return f"Saved the page count of {len(page_counts)} book(s) to '{column}'"
