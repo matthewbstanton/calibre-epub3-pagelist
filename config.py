@@ -1,5 +1,5 @@
 from qt.core import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheckBox, QLineEdit,
-                     QGroupBox, QRadioButton, QButtonGroup)
+                     QGroupBox, QRadioButton, QButtonGroup, QApplication)
 from calibre.utils.config import JSONConfig
 
 from calibre_plugins.epub3_pagelist.core.page_count import (
@@ -186,6 +186,36 @@ class ConfigWidget(QWidget):
         self.save_column_input.setEnabled(self.save_count_checkbox.isChecked())
 
         layout.addStretch(1)
+
+        self._fitted_to_contents = False
+
+    def showEvent(self, event):
+        """
+        Set the settings dialog's minimum size the first time this widget is shown.
+        """
+        super().showEvent(event)
+        if not self._fitted_to_contents:
+            self._fitted_to_contents = True
+            self.set_dialog_minimum_size()
+
+    def set_dialog_minimum_size(self):
+        """
+        Stop the dialog holding this widget from being smaller than its contents.
+        Calibre puts the widget in a scroll area, which can shrink to almost
+        nothing, and restores the dialog's last saved size, so a small saved size
+        would clip the widget behind scroll bars. Qt grows the dialog to the new
+        minimum. The minimum is capped to the screen so the dialog still fits.
+        """
+        dialog = self.window()
+        if dialog is self:
+            return
+        minimum = dialog.sizeHint()
+        screen = dialog.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            # Leave room for the window frame, which the dialog's size excludes
+            frame = dialog.frameGeometry().size() - dialog.geometry().size()
+            minimum = minimum.boundedTo(screen.availableGeometry().size() - frame)
+        dialog.setMinimumSize(minimum)
 
     def selected_source(self):
         """
