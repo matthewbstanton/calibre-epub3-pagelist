@@ -1,5 +1,5 @@
 from qt.core import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QCheckBox, QLineEdit,
-                     QGroupBox, QRadioButton, QButtonGroup)
+                     QGroupBox, QRadioButton, QButtonGroup, QApplication)
 from calibre.utils.config import JSONConfig
 
 from calibre_plugins.epub3_pagelist.core.page_count import (
@@ -186,6 +186,48 @@ class ConfigWidget(QWidget):
         self.save_column_input.setEnabled(self.save_count_checkbox.isChecked())
 
         layout.addStretch(1)
+
+        self._fitted_to_contents = False
+
+    def showEvent(self, event):
+        """
+        Grow the settings dialog to fit this widget the first time it is shown.
+        """
+        super().showEvent(event)
+        if not self._fitted_to_contents:
+            self._fitted_to_contents = True
+            self.fit_dialog_to_contents()
+
+    def fit_dialog_to_contents(self):
+        """
+        Make the dialog holding this widget at least big enough to show all of it.
+        Calibre puts the widget in a scroll area and restores the dialog's last
+        saved size, so a size saved before settings were added would clip the
+        widget behind scroll bars. The dialog only grows, never past the screen.
+        """
+        dialog = self.window()
+        if dialog is self:
+            return
+        hint = dialog.sizeHint()
+        width = max(dialog.width(), hint.width())
+        height = max(dialog.height(), hint.height())
+        screen = dialog.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen is not None else None
+        if available is not None:
+            # Leave room for the window frame, which the dialog's size excludes
+            frame = dialog.frameGeometry().size() - dialog.geometry().size()
+            width = max(dialog.width(), min(width, available.width() - frame.width()))
+            height = max(dialog.height(), min(height, available.height() - frame.height()))
+        if width == dialog.width() and height == dialog.height():
+            return
+        dialog.resize(width, height)
+        if available is not None:
+            # Pull the dialog back on screen if growing pushed it over an edge
+            geometry = dialog.frameGeometry()
+            x = max(available.left(), min(geometry.x(), available.right() + 1 - geometry.width()))
+            y = max(available.top(), min(geometry.y(), available.bottom() + 1 - geometry.height()))
+            if (x, y) != (geometry.x(), geometry.y()):
+                dialog.move(x, y)
 
     def selected_source(self):
         """
