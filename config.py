@@ -191,43 +191,31 @@ class ConfigWidget(QWidget):
 
     def showEvent(self, event):
         """
-        Grow the settings dialog to fit this widget the first time it is shown.
+        Set the settings dialog's minimum size the first time this widget is shown.
         """
         super().showEvent(event)
         if not self._fitted_to_contents:
             self._fitted_to_contents = True
-            self.fit_dialog_to_contents()
+            self.set_dialog_minimum_size()
 
-    def fit_dialog_to_contents(self):
+    def set_dialog_minimum_size(self):
         """
-        Make the dialog holding this widget at least big enough to show all of it.
-        Calibre puts the widget in a scroll area and restores the dialog's last
-        saved size, so a size saved before settings were added would clip the
-        widget behind scroll bars. The dialog only grows, never past the screen.
+        Stop the dialog holding this widget from being smaller than its contents.
+        Calibre puts the widget in a scroll area, which can shrink to almost
+        nothing, and restores the dialog's last saved size, so a small saved size
+        would clip the widget behind scroll bars. Qt grows the dialog to the new
+        minimum. The minimum is capped to the screen so the dialog still fits.
         """
         dialog = self.window()
         if dialog is self:
             return
-        hint = dialog.sizeHint()
-        width = max(dialog.width(), hint.width())
-        height = max(dialog.height(), hint.height())
+        minimum = dialog.sizeHint()
         screen = dialog.screen() or QApplication.primaryScreen()
-        available = screen.availableGeometry() if screen is not None else None
-        if available is not None:
+        if screen is not None:
             # Leave room for the window frame, which the dialog's size excludes
             frame = dialog.frameGeometry().size() - dialog.geometry().size()
-            width = max(dialog.width(), min(width, available.width() - frame.width()))
-            height = max(dialog.height(), min(height, available.height() - frame.height()))
-        if width == dialog.width() and height == dialog.height():
-            return
-        dialog.resize(width, height)
-        if available is not None:
-            # Pull the dialog back on screen if growing pushed it over an edge
-            geometry = dialog.frameGeometry()
-            x = max(available.left(), min(geometry.x(), available.right() + 1 - geometry.width()))
-            y = max(available.top(), min(geometry.y(), available.bottom() + 1 - geometry.height()))
-            if (x, y) != (geometry.x(), geometry.y()):
-                dialog.move(x, y)
+            minimum = minimum.boundedTo(screen.availableGeometry().size() - frame)
+        dialog.setMinimumSize(minimum)
 
     def selected_source(self):
         """
