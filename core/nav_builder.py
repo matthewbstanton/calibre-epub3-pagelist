@@ -68,6 +68,49 @@ class NavBuilder:
 
         return False
 
+    def existing_page_count(self) -> int | None:
+        """
+        Number of pages in the book's existing page-list: the entries of the
+        nav page-list, else of the NCX pageList, else of page-map.xml.
+        Returns None if none of them has any entries.
+        """
+        nav_name = self._find_nav_document()
+        if nav_name:
+            try:
+                nav_tree = self.container.parsed(nav_name)
+                ns = {'epub': EPUB_OPS_NS, 'xhtml': XHTML_NS}
+                count = len(nav_tree.xpath('//xhtml:nav[@epub:type="page-list"]//xhtml:a[@href]', namespaces=ns))
+                if count:
+                    return count
+            except Exception:
+                pass
+
+        try:
+            ncx_items = self.container.opf_xpath('//opf:item[@media-type="application/x-dtbncx+xml"]')
+            if ncx_items:
+                ncx_name = self.container.href_to_name(ncx_items[0].get('href'), base=self.container.opf_name)
+                if self.container.has_name(ncx_name):
+                    ncx_tree = self.container.parsed(ncx_name)
+                    count = len(ncx_tree.xpath('//ncx:pageList/ncx:pageTarget', namespaces={'ncx': NCX_NS}))
+                    if count:
+                        return count
+        except Exception:
+            pass
+
+        try:
+            for name in self._find_page_maps():
+                if not self.container.has_name(name):
+                    continue
+                pm_tree = self.container.parsed(name)
+                root = pm_tree.getroot() if hasattr(pm_tree, 'getroot') else pm_tree
+                count = sum(1 for _ in root.iter(f'{{{OPF_NS}}}page', 'page'))
+                if count:
+                    return count
+        except Exception:
+            pass
+
+        return None
+
     def build_page_list(self, page_breaks: list, overwrite: bool = False, synthetic: bool = True) -> None:
         """
         Main method that builds page-list in nav.xhtml, toc.ncx, and page-map.xml.
