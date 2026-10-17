@@ -190,5 +190,21 @@ class TestPageMapOverwrite(unittest.TestCase):
             self.assert_single_page_map(container, expected)
 
 
+
+class TestExistingPageCount(unittest.TestCase):
+
+    def test_no_page_list(self):
+        self.assertIsNone(NavBuilder(make_book()).existing_page_count())
+
+    def test_counts_page_map_only(self):
+        container = make_book('Misc/pagemap.xml', page_map_id='map',
+                              old_pages=[(str(n), f'ch1.xhtml#p{n}') for n in range(1, 4)])
+        self.assertEqual(NavBuilder(container).existing_page_count(), 3)
+
+    def test_counts_generated_page_list(self):
+        container = make_book()
+        NavBuilder(container).build_page_list(breaks([1, 2, 3, 4]), overwrite=True)
+        self.assertEqual(NavBuilder(container).existing_page_count(), 4)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

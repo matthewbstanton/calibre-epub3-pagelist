@@ -130,6 +130,10 @@ class EPUB3PageListAction(InterfaceAction):
                 nav_builder = NavBuilder(container)
                 if not overwrite and nav_builder.has_existing_page_list():
                     skipped_already_paginated += 1
+                    # Still save the existing page-list's count to the column
+                    existing_count = nav_builder.existing_page_count()
+                    if existing_count:
+                        saved_page_counts[book_id] = existing_count
                     continue
 
                 # f. Remove the plugin's own markers if overwriting.
@@ -259,12 +263,11 @@ class EPUB3PageListAction(InterfaceAction):
             info_dialog(self.gui, 'Processing Complete', msg,
                         det_msg='\n\n'.join(skipped_details), show=True)
         elif skipped_already_paginated > 0:
-            info_dialog(
-                self.gui,
-                'Already Paginated',
-                f'Selected {skipped_already_paginated} book(s) already have a page list.\n\nTo re-generate or overwrite it, enable "Overwrite existing page-list" in plugin preferences.',
-                show=True,
-            )
+            msg = (f'Selected {skipped_already_paginated} book(s) already have a page list.\n\n'
+                   'To re-generate or overwrite it, enable "Overwrite existing page-list" in plugin preferences.')
+            if save_note:
+                msg += '\n\n' + save_note
+            info_dialog(self.gui, 'Already Paginated', msg, show=True)
         elif skipped_non_epub3 > 0:
             info_dialog(
                 self.gui,
