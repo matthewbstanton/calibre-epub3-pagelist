@@ -68,7 +68,8 @@ When you add a top-level file or directory that should ship, add it to `INCLUDES
 - `page_count_column.py` — column name normalising and type checks for the "Save page count to column" option.
 - `page_count/` — page count sources, one class per file. Each implements `PageCountSource.get_page_count(db, book_id)` from `base.py`:
   - `chars_per_page.py` (`CharsPerPageSource`), `custom_column.py` (`CustomColumnSource`)
-  - `goodreads/` (`GoodreadsSource`) and `amazon/` (`AmazonSource`): `source.py` reads the identifier and fetches; `parser.py` builds the URL and parses the page count from HTML (no network).
+  - `goodreads/` (`GoodreadsSource`) and `amazon/` (`AmazonSource`): `source.py` reads the identifier and fetches; `parser.py` builds the URL and parses the page count from HTML (no network). `AmazonSource` takes the identifier name and a label, so the `amazon` and `mobi-asin` options share it.
+  - Every source has a `label` (e.g. `Amazon ID`). `PagePlan.origin` turns it into the "from ..." text that the summary dialogs show next to each page count; give a new source a `label`.
   - `fetch.py` — `FetchResult`, the result of a web request.
   - `factory.py` — `create_page_count_source()` maps the `page_count_source` pref to a source. `action.py` calls it and passes in `CalibreFetcher().fetch`.
 

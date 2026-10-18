@@ -13,6 +13,8 @@ class GoodreadsSource(PageCountSource):
     Fetches the page count from the Goodreads book page for the book's
     ``goodreads`` identifier.
     """
+    label = 'Goodreads ID'
+
     def __init__(self, fetch: Callable[[str], FetchResult]):
         self.fetch = fetch
 

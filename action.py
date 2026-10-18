@@ -205,12 +205,10 @@ class EPUB3PageListAction(InterfaceAction):
                 processed_count += 1
                 saved_page_counts[book_id] = len(pages)
                 title = db.new_api.field_for('title', book_id)
-                if from_markers:
-                    page_counts.append(f"{title}: {len(pages)} pages (from the book's page markers)")
-                elif target_pages and target_pages != len(pages):
-                    page_counts.append(f'{title}: {len(pages)} pages (target {target_pages})')
+                if target_pages and target_pages != len(pages):
+                    page_counts.append(f'{title}: {len(pages)} pages (from {plan.origin}, target {target_pages})')
                 else:
-                    page_counts.append(f'{title}: {len(pages)} pages')
+                    page_counts.append(f'{title}: {len(pages)} pages (from {plan.origin})')
                 
             except Exception as e:
                 error_count += 1
@@ -341,12 +339,7 @@ class EPUB3PageListAction(InterfaceAction):
                                   overwrite, use_markers=use_markers, markers_only=markers_only)
                 if plan.page_count:
                     page_counts[book_id] = plan.page_count
-                    if plan.outcome == PLAN_EXISTING:
-                        counted.append(f'{title}: {plan.page_count} pages (existing page list)')
-                    elif plan.from_markers:
-                        counted.append(f"{title}: {plan.page_count} pages (from the book's page markers)")
-                    else:
-                        counted.append(f'{title}: {plan.page_count} pages')
+                    counted.append(f'{title}: {plan.page_count} pages (from {plan.origin})')
                 elif plan.outcome == PLAN_NO_MARKERS:
                     skipped.append(f'{title}: no page markers')
                 elif plan.outcome == PLAN_NO_PAGE_COUNT:

@@ -36,12 +36,25 @@ class PagePlan:
     existing_count: entries in the existing page-list, for PLAN_EXISTING (may be None).
     target_pages: the source's target count, if it gave one.
     source_result: the page count source's answer, if it was asked.
+    source_label: the page count source's label, if it was asked.
     """
     outcome: str
     pages: list = field(default_factory=list)
     existing_count: Optional[int] = None
     target_pages: Optional[int] = None
     source_result: Optional[PageCount] = None
+    source_label: Optional[str] = None
+
+    @property
+    def origin(self) -> Optional[str]:
+        """
+        Where the page count came from, in words for the user.
+        """
+        if self.outcome == PLAN_EXISTING:
+            return 'existing page list'
+        if self.outcome == PLAN_MARKERS:
+            return "the book's page markers"
+        return self.source_label
 
     @property
     def from_markers(self) -> bool:
@@ -91,12 +104,14 @@ def plan_pages(container, page_count_source, db, book_id, config: PaginationConf
 
     # Asked after the overwrite check so skipped books cost no web request
     result = page_count_source.get_page_count(db, book_id)
+    label = page_count_source.label
     if result.skipped:
-        return PagePlan(PLAN_NO_PAGE_COUNT, source_result=result)
+        return PagePlan(PLAN_NO_PAGE_COUNT, source_result=result, source_label=label)
 
     target_pages = result.pages
     paginator = Paginator(container, config)
     pages = paginator.fit_to_page_count(target_pages) if target_pages else paginator.paginate()
     if not pages:
-        return PagePlan(PLAN_EMPTY, target_pages=target_pages, source_result=result)
-    return PagePlan(PLAN_GENERATED, pages=pages, target_pages=target_pages, source_result=result)
+        return PagePlan(PLAN_EMPTY, target_pages=target_pages, source_result=result, source_label=label)
+    return PagePlan(PLAN_GENERATED, pages=pages, target_pages=target_pages, source_result=result,
+                    source_label=label)

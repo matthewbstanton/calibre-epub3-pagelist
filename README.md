@@ -66,7 +66,7 @@ calibre-customize -a epub3_pagelist.zip
 1. Select one or more **EPUB 3** books in your Calibre library.
 2. Click the **Generate Page List** icon in the Calibre toolbar.
 3. The plugin will process the selected books and display a summary dialog showing:
-   - Number of successfully processed books
+   - Number of successfully processed books, with each book's page count and where it came from (the book's page markers, its existing page list, or the page count source: characters per page, custom column, Goodreads ID, Amazon ID or mobi-asin ID)
    - Any skipped non-EPUB3 or already-paginated titles
    - Any errors encountered (with full tracebacks available)
 
@@ -93,6 +93,7 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Custom column** | empty | Reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). Enter the column's lookup name, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. The name box is only enabled when this option is selected. |
 | ↳ **Use Goodreads Id** | — | Looks up each book's `goodreads` identifier (as stored by the Goodreads metadata source plugin), fetches `https://www.goodreads.com/book/show/<id>` and generates a page-list with the page count shown there (or the closest count it can reach). Needs an internet connection. |
 | ↳ **Use Amazon Id** | — | Looks up each book's `amazon` identifier (the ASIN, as stored by Calibre's Amazon metadata source), fetches `https://www.amazon.com/dp/<ASIN>` and generates a page-list with the print length shown there (or the closest count it can reach). Only the `amazon` identifier is used; regional ones such as `amazon_uk` are ignored. Needs an internet connection. |
+| ↳ **Use mobi-asin** | — | Same as **Use Amazon Id**, but reads the ASIN from each book's `mobi-asin` identifier instead. Only the `mobi-asin` identifier is used. Needs an internet connection. |
 | **Existing page markers** | Use the book's page markers, generate pages if it has none | Radio group that picks what to do with print page markers already in the book. See [Existing page markers](#existing-page-markers). |
 | ↳ **Use the book's page markers, generate pages if it has none** | — | Default option. If the book marks its print pages, builds the page-list from those real page numbers and adds no synthetic markers. Books without markers are paginated with the page count source as usual. |
 | ↳ **Use the book's page markers, skip books without them** | — | As above, but books without page markers are skipped and listed in the summary dialog. |
@@ -103,7 +104,7 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 
 If you used the earlier **Use custom column for page count** checkbox, your setting carries over: if it was ticked, **Custom column** is selected.
 
-When **Use Goodreads Id** or **Use Amazon Id** is selected, a book is skipped, and listed with the reason in the summary dialog, if it has no ID of that kind, the page can't be fetched (each request times out after 30 seconds), or no page count can be found on it. Amazon sometimes answers automated requests with a bot check page instead of the product page; those books are skipped with "no page count found", and "Show details" shows the response. The other books in the batch are still processed. Books that already have a page list with overwrite disabled are skipped before any request is made.
+When **Use Goodreads Id**, **Use Amazon Id** or **Use mobi-asin** is selected, a book is skipped, and listed with the reason in the summary dialog, if it has no ID of that kind, the page can't be fetched (each request times out after 30 seconds), or no page count can be found on it. Amazon sometimes answers automated requests with a bot check page instead of the product page; those books are skipped with "no page count found", and "Show details" shows the response. The other books in the batch are still processed. Books that already have a page list with overwrite disabled are skipped before any request is made.
 
 ### Existing page markers
 
