@@ -10,24 +10,20 @@ from .parser import product_url, parse_page_count
 
 class AmazonSource(PageCountSource):
     """
-    Fetches the page count from the Amazon product page for the ASIN stored
-    in one of the book's identifiers: ``amazon`` by default, or e.g.
-    ``mobi-asin`` (the ASIN stored in MOBI/AZW files).
+    Fetches the page count from the Amazon product page for the book's
+    ``amazon`` identifier (its ASIN).
     """
-    def __init__(self, fetch: Callable[[str], FetchResult],
-                 identifier: str = 'amazon', label: str = 'Amazon'):
+    def __init__(self, fetch: Callable[[str], FetchResult]):
         self.fetch = fetch
-        self.identifier = identifier
-        self.label = label
 
     def get_page_count(self, db, book_id) -> PageCount:
         identifiers = db.field_for('identifiers', book_id) or {}
-        asin = identifiers.get(self.identifier)
+        asin = identifiers.get('amazon')
         if not asin:
-            return PageCount(skip_reason=f'no {self.label} ID in its identifiers')
+            return PageCount(skip_reason='no Amazon ID in its identifiers')
         url = product_url(asin)
         if not url:
-            return PageCount(skip_reason=f'invalid {self.label} ID "{asin}"')
+            return PageCount(skip_reason=f'invalid Amazon ID "{asin}"')
 
         result = self.fetch(url)
         if result.error is not None:
