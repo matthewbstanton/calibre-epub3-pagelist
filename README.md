@@ -38,7 +38,7 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - Automatically skips EPUB 2 files (shows informative summary after processing).
   - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating. Print page markers that came with the book are never removed.
 - **Customizable**:
-  - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column, Goodreads ID or Amazon ID to set each book's page count.
+  - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column, Goodreads ID, Amazon ID or mobi-asin to set each book's page count.
 
 ---
 
@@ -93,6 +93,7 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Custom column** | empty | Reads each book's page count from a Calibre custom column and generates a page-list with that many pages (or the closest count it can reach). Enter the column's lookup name, e.g. `#pages` (the leading `#` is optional). Must be a numeric column. The name box is only enabled when this option is selected. |
 | ↳ **Use Goodreads Id** | — | Looks up each book's `goodreads` identifier (as stored by the Goodreads metadata source plugin), fetches `https://www.goodreads.com/book/show/<id>` and generates a page-list with the page count shown there (or the closest count it can reach). Needs an internet connection. |
 | ↳ **Use Amazon Id** | — | Looks up each book's `amazon` identifier (the ASIN, as stored by Calibre's Amazon metadata source), fetches `https://www.amazon.com/dp/<ASIN>` and generates a page-list with the print length shown there (or the closest count it can reach). Only the `amazon` identifier is used; regional ones such as `amazon_uk` are ignored. Needs an internet connection. |
+| ↳ **Use mobi-asin** | — | Same as *Use Amazon Id*, but reads the book's `mobi-asin` identifier (the ASIN stored in MOBI/AZW files, e.g. `B0xxxxxxxx`) instead of `amazon`. Fetches `https://www.amazon.com/dp/<ASIN>` in the same way. Needs an internet connection. |
 | **Existing page markers** | Use the book's page markers, generate pages if it has none | Radio group that picks what to do with print page markers already in the book. See [Existing page markers](#existing-page-markers). |
 | ↳ **Use the book's page markers, generate pages if it has none** | — | Default option. If the book marks its print pages, builds the page-list from those real page numbers and adds no synthetic markers. Books without markers are paginated with the page count source as usual. |
 | ↳ **Use the book's page markers, skip books without them** | — | As above, but books without page markers are skipped and listed in the summary dialog. |

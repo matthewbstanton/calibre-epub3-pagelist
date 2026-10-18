@@ -14,6 +14,7 @@ from core.page_count import (
     CharsPerPageSource, CustomColumnSource, GoodreadsSource, AmazonSource, FetchResult,
     create_page_count_source, describe_fetch,
     SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, SOURCE_AMAZON_ID,
+    SOURCE_MOBI_ASIN,
 )
 
 
@@ -165,6 +166,33 @@ class TestAmazonSource(unittest.TestCase):
         self.assertIn('<html></html>', page_count.details)
 
 
+class TestMobiAsinSource(unittest.TestCase):
+
+    def source(self, fetch):
+        return create_page_count_source(SOURCE_MOBI_ASIN, {}, fetch)
+
+    def test_fetches_using_mobi_asin_identifier(self):
+        fetch = FakeFetch(FetchResult(status=200, body=AMAZON_PAGE))
+        db = FakeDb({1: {'identifiers': {'mobi-asin': 'B00ABCDEFG'}}})
+        page_count = self.source(fetch).get_page_count(db, 1)
+        self.assertEqual(page_count.pages, 352)
+        self.assertEqual(fetch.urls, ['https://www.amazon.com/dp/B00ABCDEFG'])
+
+    def test_ignores_amazon_identifier(self):
+        fetch = FakeFetch(FetchResult(body=AMAZON_PAGE))
+        db = FakeDb({1: {'identifiers': {'amazon': 'B00ABCDEFG'}}})
+        page_count = self.source(fetch).get_page_count(db, 1)
+        self.assertEqual(page_count.skip_reason, 'no mobi-asin ID in its identifiers')
+        self.assertEqual(fetch.urls, [])
+
+    def test_invalid_id_skips_without_fetching(self):
+        fetch = FakeFetch(FetchResult(body=AMAZON_PAGE))
+        db = FakeDb({1: {'identifiers': {'mobi-asin': 'abc'}}})
+        page_count = self.source(fetch).get_page_count(db, 1)
+        self.assertEqual(page_count.skip_reason, 'invalid mobi-asin ID "abc"')
+        self.assertEqual(fetch.urls, [])
+
+
 class TestDescribeFetch(unittest.TestCase):
 
     def test_body_is_truncated(self):
@@ -186,6 +214,9 @@ class TestCreatePageCountSource(unittest.TestCase):
                               GoodreadsSource)
         self.assertIsInstance(create_page_count_source(SOURCE_AMAZON_ID, prefs, None),
                               AmazonSource)
+        mobi = create_page_count_source(SOURCE_MOBI_ASIN, prefs, None)
+        self.assertIsInstance(mobi, AmazonSource)
+        self.assertEqual(mobi.identifier, 'mobi-asin')
 
     def test_unknown_source_falls_back_to_chars_per_page(self):
         self.assertIsInstance(create_page_count_source('other', {}, None), CharsPerPageSource)
