@@ -2,7 +2,9 @@ Calibre GUI plugin that injects synthetic page-list navigation (EPUB3 `nav` page
 
 ## Development
 
-Read `dev.md` for development, testing and build instructions, the project layout, the rules for changing the code (including that `core/` must not import Calibre or Qt) and the design principles. Keep `dev.md` up to date instead of repeating its content here.
+@dev.md
+
+Keep `dev.md` up to date instead of repeating its content here.
 
 ## Agent skills
 
