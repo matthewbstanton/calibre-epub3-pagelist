@@ -29,18 +29,20 @@ jobs:
 
     - name: Build plugin ZIP
       run: python3 build.py
-
     - name: Get short SHA and version
       id: info
       run: |
         echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
         echo "version=$(python3 -c "import re;print('.'.join(re.search(r'version\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)', open('__init__.py').read()).groups()))")" >> "$GITHUB_OUTPUT"
 
+    - name: Build plugin ZIP
+      run: python3 build.py --output epub3_pagelist-${{ steps.info.outputs.version }}.zip
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: epub3_pagelist-${{ steps.info.outputs.sha }}
-        path: epub3_pagelist.zip
+        name: epub3_pagelist-${{ steps.info.outputs.version }}
+        path: epub3_pagelist-${{ steps.info.outputs.version }}.zip
 
     - name: Create release if version is new
       env:
@@ -50,7 +52,7 @@ jobs:
         if gh release view "$VERSION" >/dev/null 2>&1; then
           echo "Release $VERSION already exists, skipping."
         else
-          gh release create "$VERSION" epub3_pagelist.zip \
+          gh release create "$VERSION" "epub3_pagelist-$VERSION.zip" \
             --target "$(git rev-parse HEAD)" \
             --title "$VERSION" --generate-notes
         fi

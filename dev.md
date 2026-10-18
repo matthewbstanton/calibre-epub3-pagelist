@@ -35,6 +35,12 @@ python3 build.py
 
 This writes `epub3_pagelist.zip` in the repo root.
 
+To choose the file name (for example a versioned one), pass `--output`:
+
+```bash
+python3 build.py --output epub3_pagelist-1.0.7.zip
+```
+
 To build and immediately install/update into your local Calibre (needs `calibre-customize` on your `PATH`):
 
 ```bash

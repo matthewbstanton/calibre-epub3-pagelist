@@ -3,9 +3,11 @@
 Build script to package the EPUB3 Page List Generator into a Calibre plugin ZIP.
 
 Usage:
-    python build.py [--install]
+    python build.py [--install] [--output NAME]
 
 Options:
+    --output NAME  Write the ZIP as NAME instead of epub3_pagelist.zip
+                   (for example epub3_pagelist-1.0.7.zip).
     --install    Automatically install/update the plugin in Calibre after building
                  (requires `calibre-customize` in PATH).
 """
@@ -89,7 +91,10 @@ def install_plugin(zip_path):
 
 
 def main():
-    zip_path = build_plugin_zip()
+    output = PLUGIN_NAME
+    if "--output" in sys.argv:
+        output = sys.argv[sys.argv.index("--output") + 1]
+    zip_path = build_plugin_zip(output)
     if "--install" in sys.argv:
         install_plugin(zip_path)
 
