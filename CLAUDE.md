@@ -6,6 +6,10 @@ Calibre GUI plugin that injects synthetic page-list navigation (EPUB3 `nav` page
 
 Keep `dev.md` up to date instead of repeating its content here.
 
+## Pull requests
+
+For any work on a GitHub issue, always open a pull request and put `Closes #<issue number>` in the PR body, so merging the PR closes the issue.
+
 ## Agent skills
 
 ### Issue tracker
