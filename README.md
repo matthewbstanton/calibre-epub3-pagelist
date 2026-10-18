@@ -78,6 +78,7 @@ Click the arrow next to the **Generate Page List** button for more options:
 |---|---|
 | **Generate Page List** | The same as clicking the button. |
 | **Save page count to column** | Only saves page counts: works out each selected book's page count and writes it to the column set in **Save page count to column**, without changing the books. No page markers, page-list, NCX `pageList`, `page-map.xml` or metadata are added. The count is the one **Generate Page List** would save: the entries of an existing page-list (when **Overwrite existing page-list** is off), the book's own page markers, or the number of pages generated from the page count source. A summary lists the count found for each book and any books skipped. This entry is only enabled while **Save page count to column** is ticked in the settings; changing the setting takes effect the next time you open the menu. |
+| **Remove page list** | Strips what the plugin added to the selected books: its synthetic page markers, the nav page-list, the NCX `pageList`, `page-map.xml` and the accessibility metadata (`pageBreakMarkers`, `pageNavigation`, `pageBreakSource: none`). The book's own print page markers are left alone. A book is only changed if it carries the plugin's footprint (markers it injected, or `pageBreakSource: none`), so a retail book's own page-list is never removed. Page-lists built from a book's own markers carry no footprint and are kept. |
 | **Customize plugin…** | Opens the plugin settings. |
 
 ---
