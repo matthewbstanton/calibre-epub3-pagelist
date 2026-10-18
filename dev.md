@@ -77,6 +77,7 @@ To publish a release, bump `version` in `__init__.py` in your PR and merge it.
 ### `core/` (no Calibre, no Qt)
 
 - `paginator.py` — computes `PageBreak` positions. `paginate()` uses characters per page, snaps to paragraphs and starts each spine item on a new page. `fit_to_page_count()` aims for a target page count instead.
+- `page_list_remover.py` — `PageListRemover`: the "Remove page list" menu action. Strips markers, nav page-list, NCX `pageList`, `page-map.xml` and metadata, but only from books with the plugin's footprint.
 - `page_planner.py` — `plan_pages()` decides what a book gets (keep its existing page-list, use its own print page markers, or paginate) and returns a `PagePlan` without writing anything.
 - `existing_markers.py` — `ExistingMarkerDetector`: finds print page markers already in a book.
 - `marker_injector.py` — inserts and removes `doc-pagebreak` markers in content documents.
@@ -91,7 +92,7 @@ To publish a release, bump `version` in `__init__.py` in your PR and merge it.
 
 ### `tests/`
 
-One `test_*.py` per area (`test_core.py`, `test_page_planner.py`, `test_existing_markers.py`, `test_page_count.py`, `test_goodreads.py`, `test_amazon.py`, `test_page_map.py`, `test_page_count_column.py`). They import `core` directly, e.g. `from core.paginator import ...`, and use a mock Polish container. Add tests next to the area you change.
+One `test_*.py` per area (`test_core.py`, `test_page_planner.py`, `test_existing_markers.py`, `test_page_count.py`, `test_goodreads.py`, `test_amazon.py`, `test_page_map.py`, `test_page_list_remover.py`, `test_page_count_column.py`). They import `core` directly, e.g. `from core.paginator import ...`, and use a mock Polish container. Add tests next to the area you change.
 
 ## Rules for changing the code
 

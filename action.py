@@ -13,6 +13,7 @@ from calibre_plugins.epub3_pagelist.config import (plugin_prefs, get_page_count_
 from calibre_plugins.epub3_pagelist.core.paginator import PaginationConfig
 from calibre_plugins.epub3_pagelist.core.marker_injector import MarkerInjector
 from calibre_plugins.epub3_pagelist.core.nav_builder import NavBuilder
+from calibre_plugins.epub3_pagelist.core.page_list_remover import PageListRemover
 from calibre_plugins.epub3_pagelist.core.page_planner import (plan_pages, PLAN_EXISTING, PLAN_NO_MARKERS,
                                                               PLAN_NO_PAGE_COUNT, PLAN_EMPTY)
 from calibre_plugins.epub3_pagelist.core.page_count import create_page_count_source
@@ -49,6 +50,11 @@ class EPUB3PageListAction(InterfaceAction):
             shortcut=False, triggered=self.save_page_count_to_column,
             description='Write the page count of the selected books to the custom column set in the '
                         'settings, without changing the books')
+        self.create_menu_action(
+            menu, 'epub3-pagelist-remove', 'Remove page list',
+            shortcut=False, triggered=self.remove_page_list,
+            description='Remove the page-list, page markers and metadata the plugin added to the '
+                        'selected books. The books\' own print page markers are kept')
         menu.addSeparator()
         self.create_menu_action(menu, 'epub3-pagelist-customize', 'Customize plugin…',
                                 icon='config.png', shortcut=False, triggered=self.show_configuration)
@@ -393,6 +399,72 @@ class EPUB3PageListAction(InterfaceAction):
                 msg += '\n\nClick "Show details" to see the responses for skipped books.'
             info_dialog(self.gui, 'Save Page Count to Column', msg,
                         det_msg='\n\n'.join(skipped_details), show=True)
+
+    def remove_page_list(self):
+        """
+        Menu action: strip what the plugin added from each selected book
+        (synthetic markers, nav page-list, NCX pageList, page-map.xml and
+        accessibility metadata). Books without the plugin's footprint, and
+        the books' own print page markers, are left alone.
+        """
+        selected_ids = self.gui.library_view.get_selected_ids()
+        if not selected_ids:
+            info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
+            return
+
+        db = self.gui.current_db
+        removed = []
+        unchanged = 0
+        skipped_no_epub = 0
+        error_details = []
+
+        for book_id in selected_ids:
+            temp_file_path = None
+            title = db.new_api.field_for('title', book_id)
+            try:
+                epub_path, temp_file_path = self._epub_path(db, book_id)
+                if not epub_path:
+                    skipped_no_epub += 1
+                    continue
+
+                container = get_container(epub_path, tweak_mode=True)
+                result = PageListRemover(container).remove()
+                if not result.changed:
+                    unchanged += 1
+                    continue
+
+                container.commit()
+                if temp_file_path:
+                    with open(temp_file_path, 'rb') as f:
+                        db.new_api.set_format(book_id, 'EPUB', f)
+                removed.append(f'{title}: {result.markers} marker(s) removed')
+            except Exception as e:
+                tb = traceback.format_exc()
+                error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
+            finally:
+                if temp_file_path:
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
+
+        msg = (f'Removed the page list from {len(removed)} book(s):\n' + '\n'.join(f'    {r}' for r in removed)
+               if removed else 'No page lists added by the plugin were found in the selected books.')
+        notes = []
+        if unchanged:
+            notes.append(f'{unchanged} book(s) had nothing added by the plugin')
+        if skipped_no_epub:
+            notes.append(f'Skipped {skipped_no_epub} book(s) with no EPUB format')
+        if notes:
+            msg += '\n\n' + '\n'.join(f'• {n}' for n in notes)
+
+        if error_details:
+            error_dialog(self.gui, 'Errors while removing page lists',
+                         f'Encountered errors on {len(error_details)} book(s). '
+                         'Click "Show details" for the full traceback.\n\n' + msg,
+                         det_msg='\n\n'.join(error_details), show=True)
+        else:
+            info_dialog(self.gui, 'Remove Page List', msg, show=True)
 
     def save_page_counts(self, db, page_counts):
         """
