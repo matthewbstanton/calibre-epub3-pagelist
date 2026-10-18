@@ -45,6 +45,16 @@ If `calibre-customize` isn't found, the script says so and you can load the ZIP 
 
 When you add a top-level file or directory that should ship, add it to `INCLUDES` in `build.py`.
 
+### Automated build and release
+
+`.github/workflows/build.yml` ("Build Plugin") runs after the "Unit Tests" workflow completes successfully for a push to `master` (so after a PR is merged). It can also be started by hand with `workflow_dispatch`. If the tests fail, nothing is built.
+
+1. It runs `python3 build.py`.
+2. It uploads `epub3_pagelist.zip` as a workflow artifact named `epub3_pagelist-<short commit SHA>`. Download it from the workflow run page.
+3. It reads `version` from `__init__.py` (for example `(1, 0, 7)` becomes `1.0.7`). If no release with that tag exists, it creates a GitHub Release with that tag and attaches the ZIP. If the tag already exists, it skips the release, so merges without a version bump never create duplicates.
+
+To publish a release, bump `version` in `__init__.py` in your PR and merge it.
+
 ## Project layout
 
 ### Plugin entry files (need Calibre)
