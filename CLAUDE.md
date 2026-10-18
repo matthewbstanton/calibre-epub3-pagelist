@@ -2,9 +2,9 @@ Calibre GUI plugin that injects synthetic page-list navigation (EPUB3 `nav` page
 
 ## Development
 
-@dev.md
+@.claude/agents/dev.md
 
-Keep `dev.md` up to date instead of repeating its content here.
+Keep `.claude/agents/dev.md` up to date instead of repeating its content here.
 
 ## Pull requests
 
