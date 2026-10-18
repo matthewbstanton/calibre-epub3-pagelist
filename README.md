@@ -127,37 +127,9 @@ When **Custom column** is selected, the plugin shows a dialog after processing l
 
 ---
 
-## Development & Building
+## Development
 
-### Requirements
-- Python 3.10+
-- `lxml`
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-### Running Unit Tests
-
-Unit tests run using mock container objects and do not require Calibre to be installed:
-
-```bash
-python3 -m unittest discover -s tests -p "test_*.py" -v
-```
-
-### Building the Plugin ZIP
-
-To package the plugin for distribution or installation:
-
-```bash
-python3 build.py
-```
-
-To build and immediately install/update into your local Calibre:
-
-```bash
-python3 build.py --install
-```
+Contributions are welcome. Requirements, running the tests, building the plugin ZIP, the project layout and coding guidelines are in [dev.md](dev.md).
 
 ---
 
