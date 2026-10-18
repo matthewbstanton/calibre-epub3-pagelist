@@ -58,6 +58,19 @@ def plan(container, source, overwrite=False, use_markers=True, markers_only=Fals
 
 class TestPlanPages(unittest.TestCase):
 
+    def test_origin_names_where_the_pages_came_from(self):
+        page_list = '<nav epub:type="page-list"><ol><li><a href="ch1.xhtml">1</a></li></ol></nav>'
+        existing = plan(make_book(page_list=page_list)[0], FakeSource())
+        self.assertEqual(existing.origin, 'existing page list')
+        markers = plan(make_book(body=retail_body())[0], FakeSource())
+        self.assertEqual(markers.origin, "the book's page markers")
+        source = FakeSource(PageCount(pages=3))
+        source.label = 'Amazon ID'
+        generated = plan(make_book()[0], source)
+        self.assertEqual(generated.origin, 'Amazon ID')
+        skipped = plan(make_book()[0], FakeSource(PageCount(skip_reason='nope')))
+        self.assertEqual(skipped.origin, PageCountSource.label)
+
     def test_existing_page_list_is_kept_when_not_overwriting(self):
         page_list = ('<nav epub:type="page-list"><ol>'
                      + ''.join(f'<li><a href="ch1.xhtml#p{n}">{n}</a></li>' for n in range(1, 8))

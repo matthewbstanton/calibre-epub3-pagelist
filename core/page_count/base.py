@@ -26,7 +26,11 @@ class PageCount:
 class PageCountSource:
     """
     Base class for page count sources.
+
+    label: short name shown to the user as where a page count came from.
     """
+    label = 'page count source'
+
     def get_page_count(self, db, book_id) -> PageCount:
         raise NotImplementedError
 

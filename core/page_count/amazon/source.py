@@ -11,19 +11,23 @@ from .parser import product_url, parse_page_count
 class AmazonSource(PageCountSource):
     """
     Fetches the page count from the Amazon product page for the book's
-    ``amazon`` identifier (its ASIN).
+    ``amazon`` identifier (its ASIN). ``identifier`` and ``label`` name another
+    identifier that holds an ASIN, such as ``mobi-asin``.
     """
-    def __init__(self, fetch: Callable[[str], FetchResult]):
+    def __init__(self, fetch: Callable[[str], FetchResult], identifier: str = 'amazon',
+                 label: str = 'Amazon ID'):
         self.fetch = fetch
+        self.identifier = identifier
+        self.label = label
 
     def get_page_count(self, db, book_id) -> PageCount:
         identifiers = db.field_for('identifiers', book_id) or {}
-        asin = identifiers.get('amazon')
+        asin = identifiers.get(self.identifier)
         if not asin:
-            return PageCount(skip_reason='no Amazon ID in its identifiers')
+            return PageCount(skip_reason=f'no {self.label} in its identifiers')
         url = product_url(asin)
         if not url:
-            return PageCount(skip_reason=f'invalid Amazon ID "{asin}"')
+            return PageCount(skip_reason=f'invalid {self.label} "{asin}"')
 
         result = self.fetch(url)
         if result.error is not None:

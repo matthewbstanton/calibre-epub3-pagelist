@@ -12,6 +12,7 @@ class CustomColumnSource(PageCountSource):
     """
     def __init__(self, column_name: str):
         self.column = '#' + column_name.strip().lstrip('#')
+        self.label = f'custom column {self.column}'
         self.values_read = []
 
     def get_page_count(self, db, book_id) -> PageCount:

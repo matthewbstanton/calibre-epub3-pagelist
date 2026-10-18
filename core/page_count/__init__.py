@@ -17,4 +17,4 @@ from .custom_column import CustomColumnSource
 from .goodreads import GoodreadsSource
 from .amazon import AmazonSource
 from .factory import (SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID,
-                      SOURCE_AMAZON_ID, PAGE_COUNT_SOURCES, create_page_count_source)
+                      SOURCE_AMAZON_ID, SOURCE_MOBI_ASIN, PAGE_COUNT_SOURCES, create_page_count_source)
