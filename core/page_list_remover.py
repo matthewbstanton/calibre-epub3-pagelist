@@ -10,8 +10,8 @@ own print page markers are never removed.
 """
 from dataclasses import dataclass
 
-from core.marker_injector import MarkerInjector, find_plugin_markers
-from core.nav_builder import NavBuilder, EPUB_OPS_NS, XHTML_NS, NCX_NS, OPF_NS
+from .marker_injector import MarkerInjector, find_plugin_markers
+from .nav_builder import NavBuilder, EPUB_OPS_NS, XHTML_NS, NCX_NS, OPF_NS
 
 ACCESSIBILITY_FEATURES = ("pageBreakMarkers", "pageNavigation")
 
