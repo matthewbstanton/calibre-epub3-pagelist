@@ -125,7 +125,9 @@ class EPUB3PageListAction(InterfaceAction):
         """
         if db.new_api.has_format(book_id, BACKUP_FORMAT):
             return
-        db.new_api.add_format(book_id, BACKUP_FORMAT, epub_path, replace=False)
+        # No hooks: with them Calibre takes the format from the file extension (.epub)
+        if not db.new_api.add_format(book_id, BACKUP_FORMAT, epub_path, replace=False, run_hooks=False):
+            raise RuntimeError(f'Calibre did not add the {BACKUP_FORMAT} format')
 
     def _selected_ids(self):
         """
@@ -199,7 +201,9 @@ class EPUB3PageListAction(InterfaceAction):
                     no_backup += 1
                     continue
                 temp_file_path = db.new_api.format(book_id, BACKUP_FORMAT, as_path=True)
-                db.new_api.add_format(book_id, 'EPUB', temp_file_path, replace=True)
+                # No hooks: with them Calibre takes the format from the file extension (.pagelist_backup)
+                if not db.new_api.add_format(book_id, 'EPUB', temp_file_path, replace=True, run_hooks=False):
+                    raise RuntimeError('Calibre did not replace the EPUB format')
                 db.new_api.remove_formats({book_id: [BACKUP_FORMAT]})
                 restored_ids.append(book_id)
             except Exception as e:
