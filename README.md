@@ -43,6 +43,8 @@ The default settings suit most books. To change them, click the arrow next to th
 
 The rest of this page is the full reference.
 
+<img width="458" height="598" alt="image" src="https://github.com/user-attachments/assets/5ccac957-25b0-4b43-bf82-68b4a8c1ed32" />
+
 ---
 
 ## Technical details
