@@ -41,6 +41,8 @@ The default settings suit most books. To change them, click the arrow next to th
 - **Existing page markers**: by default the book's own print page numbers are used when it has them. Choose **Ignore page markers, always generate pages** to always use the page count source.
 - **Overwrite existing page-list**: off by default, so books that already have page numbers are skipped. Tick it to redo them.
 
+<img width="458" height="598" alt="Plugin settings dialog" src="https://github.com/user-attachments/assets/5ccac957-25b0-4b43-bf82-68b4a8c1ed32" />
+
 The rest of this page is the full reference.
 
 ---
@@ -69,7 +71,7 @@ The plugin scans EPUB 3 ebooks, calculates page break positions using **Kindle-s
 - **Safe re-running**:
   - Skips EPUB 2 files; the summary says how many were skipped.
   - Re-running removes only the markers the plugin added. Print page markers that came with the book are never removed.
-  - The book is updated in place. With **Overwrite existing page-list** on, the book's existing page-list is replaced, so keep a copy if you want the original.
+  - The book is updated in place. With **Overwrite existing page-list** on, the book's existing page-list is replaced, so keep a copy if you want the original. With **Keep a backup of the original EPUB** on (the default), the unmodified EPUB is first saved as a `PAGELIST_BACKUP` format; see [Backups](#backups).
 
 ### Installation
 
@@ -105,7 +107,14 @@ Click the arrow next to the **Generate Page List** button for more options:
 |---|---|
 | **Generate Page List** | The same as clicking the button. |
 | **Save page count to column** | Only saves page counts: works out each selected book's page count and writes it to the column set in **Save page count to column**, without changing the books. No page markers, page-list, NCX `pageList`, `page-map.xml` or metadata are added. The count is the one **Generate Page List** would save: the entries of an existing page-list (when **Overwrite existing page-list** is off), the book's own page markers, or the number of pages generated from the page count source. A summary lists the count found for each book and any books skipped. This entry is only enabled while **Save page count to column** is ticked in the settings; changing the setting takes effect the next time you open the menu. |
+| **Backup Management** → **Create backup** | Saves the current `EPUB` of each selected book as a `PAGELIST_BACKUP` format, without changing the EPUB. Books that already have a backup (never overwritten) or have no EPUB are skipped and counted in the summary. |
+| **Backup Management** → **Restore EPUB from backup** | For each selected book with a `PAGELIST_BACKUP` format, copies it back over the `EPUB` and removes the backup. Books without a backup are skipped; the summary dialog reports how many were restored, had no backup, or failed. |
+| **Backup Management** → **Remove backup** | Deletes the `PAGELIST_BACKUP` format of each selected book, keeping the current EPUB. Books without a backup are skipped and counted in the summary. |
 | **Customize plugin…** | Opens the plugin settings. |
+
+#### Backups
+
+With **Keep a backup of the original EPUB** ticked, the plugin adds the unmodified EPUB to the book as a `PAGELIST_BACKUP` format before changing it. The name has no `ORIGINAL_` prefix, so Polish, Convert and Calibre's own restore leave it alone. Only books that are actually changed get a backup, and an existing backup is never overwritten, so re-running (for example with **Overwrite existing page-list** on) keeps the first, original copy. Use **Backup Management** in the toolbar menu to create, restore or remove backups.
 
 ### Configuration
 
@@ -125,6 +134,7 @@ You can customize plugin behavior via **Preferences** → **Plugins** → **EPUB
 | ↳ **Ignore page markers, always generate pages** | — | Always paginates with the page count source, as earlier versions did. |
 | **Snap to paragraph boundaries** | `True` | Snaps page breaks to nearby paragraph tags (`<p>`, `<div>`, etc.) for cleaner breaks. |
 | **Overwrite existing page-list** | `False` | If enabled, replaces any existing page-list markers. If disabled, already-paginated books will be skipped. |
+| **Keep a backup of the original EPUB** | `True` | Before a book is changed, stores its original EPUB as a `PAGELIST_BACKUP` format. An existing backup is never overwritten. Roughly doubles each book's storage; untick to turn it off. See [Backups](#backups). |
 | **Save page count to column** | Off, empty | If ticked, writes each processed book's final page count to the custom column named in the box beside it, e.g. `#pages` (the leading `#` is optional). The count is the number of pages in the generated page-list, or in the book's own page markers if those were used. Books skipped because they already have a page-list (overwrite disabled) are still written, with the number of entries in that page-list. The column must be an integer, floating point or single-value text column. Other skipped books are not written. The name box is only enabled when the checkbox is ticked. |
 
 If you used the earlier **Use custom column for page count** checkbox, your setting carries over: if it was ticked, **Custom column** is selected.
