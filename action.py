@@ -53,6 +53,9 @@ class EPUB3PageListAction(InterfaceAction):
             description='Write the page count of the selected books to the custom column set in the '
                         'settings, without changing the books')
         backup_menu = menu.addMenu('Backup Management')
+        self.create_menu_action(backup_menu, 'epub3-pagelist-create-backup', 'Create backup',
+                                shortcut=False, triggered=self.create_backup,
+                                description='Save the current EPUB as the PAGELIST_BACKUP format')
         self.create_menu_action(backup_menu, 'epub3-pagelist-restore-backup', 'Restore EPUB from backup',
                                 shortcut=False, triggered=self.restore_backup,
                                 description='Copy the PAGELIST_BACKUP format back over the EPUB, then remove the backup')
@@ -134,6 +137,49 @@ class EPUB3PageListAction(InterfaceAction):
             return None
         return selected_ids
 
+    def create_backup(self):
+        """
+        Menu action: save the current EPUB of each selected book as its
+        PAGELIST_BACKUP. Books with no EPUB or an existing backup are skipped.
+        """
+        selected_ids = self._selected_ids()
+        if not selected_ids:
+            return
+        db = self.gui.current_db
+        created_ids = []
+        no_epub = 0
+        has_backup = 0
+        error_details = []
+        for book_id in selected_ids:
+            temp_file_path = None
+            try:
+                if not db.new_api.has_format(book_id, 'EPUB'):
+                    no_epub += 1
+                    continue
+                if db.new_api.has_format(book_id, BACKUP_FORMAT):
+                    has_backup += 1
+                    continue
+                temp_file_path = db.new_api.format(book_id, 'EPUB', as_path=True)
+                self._backup_epub(db, book_id, temp_file_path)
+                created_ids.append(book_id)
+            except Exception as e:
+                tb = traceback.format_exc()
+                title = db.new_api.field_for('title', book_id)
+                error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
+            finally:
+                if temp_file_path:
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
+        self._refresh_books(created_ids)
+        skipped = []
+        if has_backup:
+            skipped.append(f'Skipped {has_backup} book(s) that already have a backup')
+        if no_epub:
+            skipped.append(f'Skipped {no_epub} book(s) with no EPUB')
+        self._show_backup_summary('Create backup', 'Created a backup of', len(created_ids), skipped, error_details)
+
     def restore_backup(self):
         """
         Menu action: for each selected book with a PAGELIST_BACKUP, copy it back
@@ -168,7 +214,8 @@ class EPUB3PageListAction(InterfaceAction):
                         pass
         self._refresh_books(restored_ids)
         self._show_backup_summary('Restore EPUB from backup', 'Restored the original EPUB of',
-                                  len(restored_ids), no_backup, error_details)
+                                  len(restored_ids),
+                                  [f'Skipped {no_backup} book(s) with no backup'] if no_backup else [], error_details)
 
     def remove_backup(self):
         """
@@ -194,7 +241,8 @@ class EPUB3PageListAction(InterfaceAction):
                 title = db.new_api.field_for('title', book_id)
                 error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
         self._refresh_books(removed_ids)
-        self._show_backup_summary('Remove backup', 'Removed the backup of', len(removed_ids), no_backup, error_details)
+        self._show_backup_summary('Remove backup', 'Removed the backup of', len(removed_ids),
+                                  [f'Skipped {no_backup} book(s) with no backup'] if no_backup else [], error_details)
 
     def _refresh_books(self, book_ids):
         """
@@ -207,13 +255,13 @@ class EPUB3PageListAction(InterfaceAction):
         except Exception:
             pass
 
-    def _show_backup_summary(self, title, done_text, done, no_backup, error_details):
+    def _show_backup_summary(self, title, done_text, done, skipped, error_details):
         """
-        Show the restored/removed, no backup and error counts.
+        Show the done count, the skipped notes and the error count.
         """
         msg = f'{done_text} {done} book(s).'
-        if no_backup:
-            msg += f'\n\n• Skipped {no_backup} book(s) with no backup'
+        for note in skipped:
+            msg += f'\n\n• {note}'
         if error_details:
             msg += f'\n\n• Encountered errors on {len(error_details)} book(s). Click "Show details" for the full traceback.'
             error_dialog(self.gui, title, msg, det_msg='\n\n'.join(error_details), show=True)

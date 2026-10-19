@@ -105,13 +105,14 @@ Click the arrow next to the **Generate Page List** button for more options:
 |---|---|
 | **Generate Page List** | The same as clicking the button. |
 | **Save page count to column** | Only saves page counts: works out each selected book's page count and writes it to the column set in **Save page count to column**, without changing the books. No page markers, page-list, NCX `pageList`, `page-map.xml` or metadata are added. The count is the one **Generate Page List** would save: the entries of an existing page-list (when **Overwrite existing page-list** is off), the book's own page markers, or the number of pages generated from the page count source. A summary lists the count found for each book and any books skipped. This entry is only enabled while **Save page count to column** is ticked in the settings; changing the setting takes effect the next time you open the menu. |
+| **Backup Management** → **Create backup** | Saves the current `EPUB` of each selected book as a `PAGELIST_BACKUP` format, without changing the EPUB. Books that already have a backup (never overwritten) or have no EPUB are skipped and counted in the summary. |
 | **Backup Management** → **Restore EPUB from backup** | For each selected book with a `PAGELIST_BACKUP` format, copies it back over the `EPUB` and removes the backup. Books without a backup are skipped; the summary dialog reports how many were restored, had no backup, or failed. |
 | **Backup Management** → **Remove backup** | Deletes the `PAGELIST_BACKUP` format of each selected book, keeping the current EPUB. Books without a backup are skipped and counted in the summary. |
 | **Customize plugin…** | Opens the plugin settings. |
 
 #### Backups
 
-With **Keep a backup of the original EPUB** ticked, the plugin adds the unmodified EPUB to the book as a `PAGELIST_BACKUP` format before changing it. The name has no `ORIGINAL_` prefix, so Polish, Convert and Calibre's own restore leave it alone. Only books that are actually changed get a backup, and an existing backup is never overwritten, so re-running (for example with **Overwrite existing page-list** on) keeps the first, original copy. Use **Backup Management** in the toolbar menu to restore or remove backups.
+With **Keep a backup of the original EPUB** ticked, the plugin adds the unmodified EPUB to the book as a `PAGELIST_BACKUP` format before changing it. The name has no `ORIGINAL_` prefix, so Polish, Convert and Calibre's own restore leave it alone. Only books that are actually changed get a backup, and an existing backup is never overwritten, so re-running (for example with **Overwrite existing page-list** on) keeps the first, original copy. Use **Backup Management** in the toolbar menu to create, restore or remove backups.
 
 ### Configuration
 
