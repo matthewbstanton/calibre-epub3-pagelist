@@ -15,7 +15,7 @@ Forked from the original repo at https://github.com/Kaspyy/calibre-epub3-pagelis
 
 ### What it does
 
-Many e-readers show "locations" or percentages instead of page numbers. This plugin adds page numbers to your EPUB 3 books so that **Kindle** (via *Send to Kindle*) and **Apple Books** can show real-feeling pages.
+Many e-readers show "locations" or percentages instead of page numbers. This plugin adds page numbers to your EPUB 3 books so that **Kindle** (via [*Send to Kindle*](https://www.amazon.com/sendtokindle)) and **Apple Books** can show real-feeling pages.
 
 - If the book already marks its print pages, those real page numbers are used.
 - Otherwise the plugin splits the book into pages of about 1,850 characters, the same size Kindle uses.
@@ -61,7 +61,7 @@ The plugin scans EPUB 3 ebooks, calculates page break positions using **Kindle-s
 
 - **Multi-format output**:
   - **EPUB 3 Navigation Document**: Injects `<nav epub:type="page-list">` with `doc-pagebreak` milestones into `nav.xhtml`.
-  - **EPUB 2 NCX Fallback**: Injects `<pageList>` into `toc.ncx` (ensures page numbers work when sending EPUBs to Kindle via *Send to Kindle*).
+  - **EPUB 2 NCX Fallback**: Injects `<pageList>` into `toc.ncx` (ensures page numbers work when sending EPUBs to Kindle via [*Send to Kindle*](https://www.amazon.com/sendtokindle)).
   - **Adobe Page Map**: Generates `page-map.xml`, Adobe's page-map format.
   - **EPUB Accessibility Metadata**: Adds `schema:accessibilityFeature` (`pageBreakMarkers`, `pageNavigation`) and, for synthetic pages, `pageBreakSource: none` to the OPF package.
 - **Real print pages when available**: Retail EPUBs often already mark their print pages but lack a complete page-list. The plugin can build the page-list from those markers instead of generating synthetic pages.
