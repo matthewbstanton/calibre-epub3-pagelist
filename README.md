@@ -36,7 +36,7 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - Select one or dozens of books in your Calibre library and paginate them all in a single click.
 - **Safe & Non-Destructive**:
   - Automatically skips EPUB 2 files (shows informative summary after processing).
-  - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating. Print page markers that came with the book are never removed.
+  - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating. Print page markers that came with the book are left alone: only markers the plugin tagged, or untagged ones from older versions that match its exact form and numbering, are removed. In the unlikely case that a book's own markers match that legacy form exactly, they would be treated as the plugin's.
 - **Customizable**:
   - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column, Goodreads ID or Amazon ID to set each book's page count.
 
