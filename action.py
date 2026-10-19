@@ -20,6 +20,9 @@ from calibre_plugins.epub3_pagelist.core.page_count_column import (normalize_col
                                                                    column_value)
 from calibre_plugins.epub3_pagelist.fetcher import CalibreFetcher
 
+# Extra format holding the original EPUB. No ORIGINAL_ prefix, which Calibre treats specially
+BACKUP_FORMAT = 'PAGELIST_BACKUP'
+
 class EPUB3PageListAction(InterfaceAction):
     """
     Main InterfaceAction for the EPUB3 Page List plugin.
@@ -49,6 +52,13 @@ class EPUB3PageListAction(InterfaceAction):
             shortcut=False, triggered=self.save_page_count_to_column,
             description='Write the page count of the selected books to the custom column set in the '
                         'settings, without changing the books')
+        backup_menu = menu.addMenu('Backup Management')
+        self.create_menu_action(backup_menu, 'epub3-pagelist-restore-backup', 'Restore EPUB from backup',
+                                shortcut=False, triggered=self.restore_backup,
+                                description='Copy the PAGELIST_BACKUP format back over the EPUB, then remove the backup')
+        self.create_menu_action(backup_menu, 'epub3-pagelist-remove-backup', 'Remove backup',
+                                shortcut=False, triggered=self.remove_backup,
+                                description='Delete the PAGELIST_BACKUP format, keeping the current EPUB')
         menu.addSeparator()
         self.create_menu_action(menu, 'epub3-pagelist-customize', 'Customize plugin…',
                                 icon='config.png', shortcut=False, triggered=self.show_configuration)
@@ -102,6 +112,113 @@ class EPUB3PageListAction(InterfaceAction):
         # If absolute path is not available, use format to get a temp copy
         temp_file_path = db.new_api.format(book_id, 'EPUB', as_path=True)
         return temp_file_path, temp_file_path
+
+    @staticmethod
+    def _backup_epub(db, book_id, epub_path):
+        """
+        Add the EPUB at epub_path to the book as the PAGELIST_BACKUP format.
+        An existing backup is kept, so a re-run never backs up an already
+        paginated EPUB. Call before the container is committed.
+        """
+        if db.new_api.has_format(book_id, BACKUP_FORMAT):
+            return
+        db.new_api.add_format(book_id, BACKUP_FORMAT, epub_path, replace=False)
+
+    def _selected_ids(self):
+        """
+        Return the selected book ids, or None after telling the user none are selected.
+        """
+        selected_ids = self.gui.library_view.get_selected_ids()
+        if not selected_ids:
+            info_dialog(self.gui, 'No books selected', 'Please select at least one book to process.', show=True)
+            return None
+        return selected_ids
+
+    def restore_backup(self):
+        """
+        Menu action: for each selected book with a PAGELIST_BACKUP, copy it back
+        over the EPUB and remove the backup. Books without one are skipped.
+        """
+        selected_ids = self._selected_ids()
+        if not selected_ids:
+            return
+        db = self.gui.current_db
+        restored_ids = []
+        no_backup = 0
+        error_details = []
+        for book_id in selected_ids:
+            temp_file_path = None
+            try:
+                if not db.new_api.has_format(book_id, BACKUP_FORMAT):
+                    no_backup += 1
+                    continue
+                temp_file_path = db.new_api.format(book_id, BACKUP_FORMAT, as_path=True)
+                db.new_api.add_format(book_id, 'EPUB', temp_file_path, replace=True)
+                db.new_api.remove_formats({book_id: [BACKUP_FORMAT]})
+                restored_ids.append(book_id)
+            except Exception as e:
+                tb = traceback.format_exc()
+                title = db.new_api.field_for('title', book_id)
+                error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
+            finally:
+                if temp_file_path:
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
+        self._refresh_books(restored_ids)
+        self._show_backup_summary('Restore EPUB from backup', 'Restored the original EPUB of',
+                                  len(restored_ids), no_backup, error_details)
+
+    def remove_backup(self):
+        """
+        Menu action: delete the PAGELIST_BACKUP format of each selected book
+        that has one, keeping the current EPUB.
+        """
+        selected_ids = self._selected_ids()
+        if not selected_ids:
+            return
+        db = self.gui.current_db
+        removed_ids = []
+        no_backup = 0
+        error_details = []
+        for book_id in selected_ids:
+            try:
+                if not db.new_api.has_format(book_id, BACKUP_FORMAT):
+                    no_backup += 1
+                    continue
+                db.new_api.remove_formats({book_id: [BACKUP_FORMAT]})
+                removed_ids.append(book_id)
+            except Exception as e:
+                tb = traceback.format_exc()
+                title = db.new_api.field_for('title', book_id)
+                error_details.append(f'Book: {title} (ID {book_id})\nError: {e}\n{tb}\n' + '-' * 40)
+        self._refresh_books(removed_ids)
+        self._show_backup_summary('Remove backup', 'Removed the backup of', len(removed_ids), no_backup, error_details)
+
+    def _refresh_books(self, book_ids):
+        """
+        Show changed formats in the book list.
+        """
+        if not book_ids:
+            return
+        try:
+            self.gui.library_view.model().refresh_ids(list(book_ids))
+        except Exception:
+            pass
+
+    def _show_backup_summary(self, title, done_text, done, no_backup, error_details):
+        """
+        Show the restored/removed, no backup and error counts.
+        """
+        msg = f'{done_text} {done} book(s).'
+        if no_backup:
+            msg += f'\n\n• Skipped {no_backup} book(s) with no backup'
+        if error_details:
+            msg += f'\n\n• Encountered errors on {len(error_details)} book(s). Click "Show details" for the full traceback.'
+            error_dialog(self.gui, title, msg, det_msg='\n\n'.join(error_details), show=True)
+        else:
+            info_dialog(self.gui, title, msg, show=True)
 
     @staticmethod
     def _is_epub3(container):
@@ -186,6 +303,10 @@ class EPUB3PageListAction(InterfaceAction):
                 pages = plan.pages
                 from_markers = plan.from_markers
                 target_pages = plan.target_pages
+
+                # Back up the untouched EPUB; nothing is written to the file until commit()
+                if plugin_prefs['keep_backup']:
+                    self._backup_epub(db, book_id, epub_path)
 
                 # e. Inject page break markers
                 if not from_markers:

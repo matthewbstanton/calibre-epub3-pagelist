@@ -23,6 +23,8 @@ plugin_prefs.defaults['existing_markers_mode'] = MARKERS_PREFER
 # Save each processed book's final page count to this custom column
 plugin_prefs.defaults['save_page_count'] = False
 plugin_prefs.defaults['save_page_count_column'] = ''
+# Keep the original EPUB as a PAGELIST_BACKUP format before changing a book
+plugin_prefs.defaults['keep_backup'] = True
 # Superseded by 'page_count_source'; still read to migrate older settings
 plugin_prefs.defaults['use_custom_column'] = False
 plugin_prefs.defaults['custom_column_name'] = ''
@@ -176,6 +178,14 @@ class ConfigWidget(QWidget):
         self.overwrite_checkbox.setToolTip('Overwrite page-list if it already exists in the EPUB.')
         layout.addWidget(self.overwrite_checkbox)
 
+        # Keep a backup of the original EPUB
+        self.backup_checkbox = QCheckBox('Keep a backup of the original EPUB')
+        self.backup_checkbox.setChecked(plugin_prefs['keep_backup'])
+        self.backup_checkbox.setToolTip(
+            'Before a book is changed, store its original EPUB as a PAGELIST_BACKUP format. '
+            'An existing backup is never overwritten. This roughly doubles the storage used by each book.')
+        layout.addWidget(self.backup_checkbox)
+
         # Save page count to a custom column; the name box is only enabled when ticked
         save_layout = QHBoxLayout()
         self.save_count_checkbox = QCheckBox('Save page count to column:')
@@ -262,6 +272,7 @@ class ConfigWidget(QWidget):
         plugin_prefs['chars_per_page'] = self.cpp_spinbox.value()
         plugin_prefs['snap_to_paragraph'] = self.snap_checkbox.isChecked()
         plugin_prefs['overwrite_existing'] = self.overwrite_checkbox.isChecked()
+        plugin_prefs['keep_backup'] = self.backup_checkbox.isChecked()
         plugin_prefs['page_count_source'] = source
         plugin_prefs['existing_markers_mode'] = self.selected_markers_mode()
         plugin_prefs['save_page_count'] = self.save_count_checkbox.isChecked()
