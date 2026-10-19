@@ -41,9 +41,9 @@ The default settings suit most books. To change them, click the arrow next to th
 - **Existing page markers**: by default the book's own print page numbers are used when it has them. Choose **Ignore page markers, always generate pages** to always use the page count source.
 - **Overwrite existing page-list**: off by default, so books that already have page numbers are skipped. Tick it to redo them.
 
-The rest of this page is the full reference.
+<img width="458" height="598" alt="Plugin settings dialog" src="https://github.com/user-attachments/assets/5ccac957-25b0-4b43-bf82-68b4a8c1ed32" />
 
-<img width="458" height="598" alt="image" src="https://github.com/user-attachments/assets/5ccac957-25b0-4b43-bf82-68b4a8c1ed32" />
+The rest of this page is the full reference.
 
 ---
 
