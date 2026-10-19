@@ -91,7 +91,7 @@ def plan_pages(container, page_count_source, db, book_id, config: PaginationConf
     if not overwrite and nav_builder.has_existing_page_list():
         return PagePlan(PLAN_EXISTING, existing_count=nav_builder.existing_page_count())
 
-    # Print page markers that came with the book are never removed
+    # Only plugin markers are targeted; the book's own print markers are meant to be left alone (best-effort)
     if overwrite:
         MarkerInjector(container).remove_existing_markers()
 

@@ -6,7 +6,8 @@ into EPUB XHTML content documents at positions determined by the Paginator.
 
 Every marker the plugin injects carries ``data-epub3-pagelist="synthetic"``,
 so the plugin can tell its own markers apart from the print page markers
-that retail EPUBs already contain and never removes the latter.
+that retail EPUBs already contain. Telling them apart is best-effort and
+not guaranteed: untagged legacy markers are recognised heuristically.
 """
 from collections import defaultdict
 from lxml import etree

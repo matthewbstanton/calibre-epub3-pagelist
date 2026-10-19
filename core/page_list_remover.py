@@ -5,8 +5,9 @@ metadata.
 
 A book is only touched if it carries the plugin's footprint: markers the
 plugin injected, or the ``pageBreakSource: none`` metadata it writes. That
-keeps a retail book's own page-list and print page markers safe. The book's
-own print page markers are never removed.
+is meant to keep a retail book's own page-list and print page markers intact.
+That is best-effort, not a guarantee: untagged legacy markers are recognised
+heuristically.
 """
 from dataclasses import dataclass
 

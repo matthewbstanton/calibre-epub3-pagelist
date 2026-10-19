@@ -36,7 +36,7 @@ Many modern e-readers and reading apps (including **Amazon Kindle** via *Send to
   - Select one or dozens of books in your Calibre library and paginate them all in a single click.
 - **Safe & Non-Destructive**:
   - Automatically skips EPUB 2 files (shows informative summary after processing).
-  - Safe marker cleanup: cleanly removes previously generated synthetic markers when re-running or updating. Print page markers that came with the book are never removed.
+  - Marker cleanup: removes previously generated synthetic markers when re-running or updating. The plugin aims to leave a book's own print page markers alone, but this is best-effort and not guaranteed: an untagged marker that exactly matches the form and numbering of an older plugin version's markers is treated as the plugin's own. Keep a backup of books you care about.
 - **Customizable**:
   - Configurable characters-per-page target, snapping threshold, overwrite behavior, and an optional custom column, Goodreads ID or Amazon ID to set each book's page count.
 
@@ -121,7 +121,7 @@ The **Overwrite existing page-list** setting is checked before any of this: with
 
 The default uses the book's markers because real print page numbers are what a page-list is for: they match citations, book clubs and the printed edition, and a book without markers is paginated exactly as before. Select **Use the book's page markers, skip books without them** if you only want page-lists for books with real print pages.
 
-Markers the plugin adds are tagged with `data-epub3-pagelist="synthetic"`, and only those (plus untagged markers from older plugin versions, recognised by their exact form and numbering) are removed when a page-list is regenerated.
+Markers the plugin adds are tagged with `data-epub3-pagelist="synthetic"`, and only those (plus untagged markers from older plugin versions, recognised by their exact form and numbering) are removed when a page-list is regenerated. Recognising the untagged ones is a heuristic, so a book's own markers that happen to match that form could be removed. Page-lists and markers are not guaranteed to be preserved or to be accurate.
 
 If **Save page count to column** is ticked but the column doesn't exist or is of a type that can't hold a page count, nothing is saved and the summary dialog says why; the page-lists are still generated. Saving to the same column that **Custom column** reads from replaces the target count with the number of pages actually generated.
 

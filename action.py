@@ -54,7 +54,7 @@ class EPUB3PageListAction(InterfaceAction):
             menu, 'epub3-pagelist-remove', 'Remove page list',
             shortcut=False, triggered=self.remove_page_list,
             description='Remove the page-list, page markers and metadata the plugin added to the '
-                        'selected books. The books\' own print page markers are kept')
+                        'selected books. The books\' own print page markers are meant to be left alone')
         menu.addSeparator()
         self.create_menu_action(menu, 'epub3-pagelist-customize', 'Customize plugin…',
                                 icon='config.png', shortcut=False, triggered=self.show_configuration)
