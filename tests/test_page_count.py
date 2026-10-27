@@ -115,14 +115,12 @@ class TestGoodreadsSource(unittest.TestCase):
         self.assertEqual(page_count.skip_reason, 'invalid Goodreads ID "abc"')
         self.assertEqual(fetch.urls, [])
 
-    def test_fetch_error_skips_with_details(self):
+    def test_fetch_error_skips_without_details(self):
         fetch = FakeFetch(FetchResult(user_agent='UA', status=503, error=OSError('down')))
         db = FakeDb({1: {'identifiers': {'goodreads': '5907'}}})
         page_count = GoodreadsSource(fetch).get_page_count(db, 1)
-        self.assertEqual(page_count.skip_reason,
-                         'could not fetch https://www.goodreads.com/book/show/5907 (down)')
-        self.assertIn('Status: 503', page_count.details)
-        self.assertIn('User agent: UA', page_count.details)
+        self.assertEqual(page_count.skip_reason, 'error talking to the Goodreads server')
+        self.assertFalse(page_count.details)
 
     def test_no_count_on_page_skips_with_details(self):
         fetch = FakeFetch(FetchResult(status=202, headers='Server: CloudFront', body=b'<html></html>'))
@@ -159,14 +157,12 @@ class TestAmazonSource(unittest.TestCase):
         self.assertEqual(page_count.skip_reason, 'invalid Amazon ID "abc"')
         self.assertEqual(fetch.urls, [])
 
-    def test_fetch_error_skips_with_details(self):
+    def test_fetch_error_skips_without_details(self):
         fetch = FakeFetch(FetchResult(user_agent='UA', status=503, error=OSError('down')))
         db = FakeDb({1: {'identifiers': {'amazon': 'B00ABCDEFG'}}})
         page_count = AmazonSource(fetch).get_page_count(db, 1)
-        self.assertEqual(page_count.skip_reason,
-                         'could not fetch https://www.amazon.com/dp/B00ABCDEFG (down)')
-        self.assertIn('Status: 503', page_count.details)
-        self.assertIn('User agent: UA', page_count.details)
+        self.assertEqual(page_count.skip_reason, 'error talking to the Amazon server')
+        self.assertFalse(page_count.details)
 
     def test_no_count_on_page_skips_with_details(self):
         fetch = FakeFetch(FetchResult(status=200, headers='Server: Server', body=b'<html></html>'))

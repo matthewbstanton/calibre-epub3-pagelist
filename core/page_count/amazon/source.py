@@ -31,8 +31,7 @@ class AmazonSource(PageCountSource):
 
         result = fetch_with_retry(self.fetch, url, lambda r: bool(parse_page_count(r.body)))
         if result.error is not None:
-            return PageCount(skip_reason=f'could not fetch {url} ({result.error})',
-                             details=describe_fetch(url, result))
+            return PageCount(skip_reason='error talking to the Amazon server')
         pages = parse_page_count(result.body)
         if not pages:
             return PageCount(skip_reason=f'no page count found on {url}',
