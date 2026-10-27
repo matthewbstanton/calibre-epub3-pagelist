@@ -6,6 +6,7 @@ Uses a fake Calibre db and a fake fetch function; no network access.
 import os
 import sys
 import unittest
+import unittest.mock
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -16,6 +17,18 @@ from core.page_count import (
     SOURCE_CHARS_PER_PAGE, SOURCE_CUSTOM_COLUMN, SOURCE_GOODREADS_ID, SOURCE_AMAZON_ID, SOURCE_MOBI_ASIN,
     PAGE_COUNT_SOURCES,
 )
+from core.page_count import fetch as fetch_module
+
+
+def setUpModule():
+    # Skip the real wait between retries of a failed fetch
+    global _sleep_patcher
+    _sleep_patcher = unittest.mock.patch.object(fetch_module.time, 'sleep')
+    _sleep_patcher.start()
+
+
+def tearDownModule():
+    _sleep_patcher.stop()
 
 
 class FakeDb:
