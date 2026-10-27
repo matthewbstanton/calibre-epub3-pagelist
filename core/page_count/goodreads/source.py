@@ -4,7 +4,7 @@ Goodreads page count source.
 from typing import Callable
 
 from ..base import PageCount, PageCountSource
-from ..fetch import FetchResult, describe_fetch
+from ..fetch import FetchResult, describe_fetch, fetch_with_retry
 from .parser import book_url, parse_page_count
 
 
@@ -27,10 +27,9 @@ class GoodreadsSource(PageCountSource):
         if not url:
             return PageCount(skip_reason=f'invalid Goodreads ID "{goodreads_id}"')
 
-        result = self.fetch(url)
+        result = fetch_with_retry(self.fetch, url, lambda r: bool(parse_page_count(r.body)))
         if result.error is not None:
-            return PageCount(skip_reason=f'could not fetch {url} ({result.error})',
-                             details=describe_fetch(url, result))
+            return PageCount(skip_reason='error talking to the Goodreads server')
         pages = parse_page_count(result.body)
         if not pages:
             return PageCount(skip_reason=f'no page count found on {url}',

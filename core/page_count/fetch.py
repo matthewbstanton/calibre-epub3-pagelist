@@ -1,11 +1,19 @@
 """
 The result of a web request, as returned by the fetch function fetcher.py supplies.
 """
+import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 # Characters of a fetched body shown in the "Show details" text
 BODY_PREVIEW_CHARS = 3000
+
+# Tries per book for a web page, and seconds to wait between failed tries
+FETCH_ATTEMPTS = 5
+FETCH_RETRY_DELAY = 5
+
+# Statuses that a retry can't change
+NO_RETRY_STATUSES = (404, 410)
 
 
 @dataclass
@@ -40,3 +48,20 @@ def describe_fetch(url: str, result: FetchResult) -> str:
         lines.append(f'Body ({len(text)} characters, first {min(len(text), BODY_PREVIEW_CHARS)} shown):')
         lines.append(text[:BODY_PREVIEW_CHARS])
     return '\n'.join(lines)
+
+
+def fetch_with_retry(fetch: Callable[[str], FetchResult], url: str,
+                     is_usable: Callable[[FetchResult], bool]) -> FetchResult:
+    """
+    Fetch a URL, trying up to FETCH_ATTEMPTS times with FETCH_RETRY_DELAY seconds
+    between tries until the fetch has no error and is_usable accepts the result.
+    Return the last result.
+    """
+    for attempt in range(FETCH_ATTEMPTS):
+        result = fetch(url)
+        if result.error is None and is_usable(result):
+            return result
+        if result.status in NO_RETRY_STATUSES or attempt == FETCH_ATTEMPTS - 1:
+            return result
+        time.sleep(FETCH_RETRY_DELAY)
+    return result
