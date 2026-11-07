@@ -43,6 +43,8 @@ MIN_ID_PATTERN_MARKERS = 10
 MIN_ASCENDING_RATIO = 0.9
 # Share of an existing page-list's targets that must resolve for it to be used
 MIN_RESOLVED_RATIO = 0.9
+# Longest run of out-of-order pages at the end of the book that is dropped
+MAX_RELOCATED_PAGES = 10
 
 # page12, page_12, page-12, pg12, p12, Page_xii, pagexii …
 _PAGE_ID_RE = re.compile(r'^(?:page|pg|p)[-_]?(?P<num>\d+|[ivxlcdm]+)$', re.IGNORECASE)
@@ -116,6 +118,55 @@ def parse_page_id(element_id: str) -> tuple[str, int, bool] | None:
     return num.lower(), value, True
 
 
+def _label_value(label: str) -> tuple[int, bool] | None:
+    """
+    Return (numeric value, is_roman) of a page label such as ``12`` or
+    ``xii``, or None for labels like ``Cover Page``.
+    """
+    label = (label or '').strip()
+    if label.isdigit():
+        return int(label), False
+    value = roman_to_int(label)
+    return (value, True) if value is not None else None
+
+
+def drop_relocated_pages(markers: list) -> list:
+    """
+    Drop the front matter pages that the ebook moved after the last page.
+
+    Publishers often move front matter such as the praise, ad card or
+    copyright page to the back of the spine, so the page-list ends
+    ``… 446, 2, 1, 447, 4``. Kindle reads the last entry as the book's
+    page count and would show "of 4".
+
+    The trailing run of roman pages, and of arabic pages lower than half
+    the highest earlier arabic page, is dropped if it has at most
+    ``MAX_RELOCATED_PAGES`` entries. A longer run is a real section (an
+    omnibus whose second book restarts at 1) and is kept. Pages before the
+    run, and runs ending in another label such as ``Back Cover``, are
+    never changed.
+    """
+    highest_before = []
+    highest = 0
+    for marker in markers:
+        highest_before.append(highest)
+        parsed = _label_value(marker.page_label)
+        if parsed and not parsed[1]:
+            highest = max(highest, parsed[0])
+
+    start = len(markers)
+    while start > 0:
+        parsed = _label_value(markers[start - 1].page_label)
+        before = highest_before[start - 1]
+        # Relocated front matter has low page numbers; a high one is the book's own ending
+        if not parsed or not before or (not parsed[1] and parsed[0] * 2 >= before):
+            break
+        start -= 1
+    if len(markers) - start > MAX_RELOCATED_PAGES:
+        return markers
+    return markers[:start]
+
+
 def _localname(elem) -> str:
     tag = getattr(elem, 'tag', None)
     if not isinstance(tag, str):
@@ -144,7 +195,9 @@ class ExistingMarkerDetector:
 
     def detect(self) -> DetectionResult:
         """
-        Scan the book and return the markers of the first source that has any.
+        Scan the book and return the markers of the first source that has any,
+        less any pages the ebook moved out of reading order
+        (see ``drop_relocated_pages``).
 
         Elements that are used as semantic markers but have no id are given
         one (``page-<label>``) and their document is marked dirty.
@@ -157,15 +210,15 @@ class ExistingMarkerDetector:
 
         markers = self._from_existing_page_list(nav_names)
         if markers:
-            return DetectionResult(markers, METHOD_PAGE_LIST)
+            return DetectionResult(drop_relocated_pages(markers), METHOD_PAGE_LIST)
 
         markers = self._from_semantic_markers()
         if markers:
-            return DetectionResult(markers, METHOD_SEMANTIC)
+            return DetectionResult(drop_relocated_pages(markers), METHOD_SEMANTIC)
 
         markers = self._from_id_pattern()
         if markers:
-            return DetectionResult(markers, METHOD_ID_PATTERN)
+            return DetectionResult(drop_relocated_pages(markers), METHOD_ID_PATTERN)
 
         return DetectionResult()
 

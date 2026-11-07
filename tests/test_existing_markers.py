@@ -14,7 +14,7 @@ from lxml import etree
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.existing_markers import (
-    ExistingMarkerDetector, parse_page_id, roman_to_int,
+    ExistingMarkerDetector, PageMarker, drop_relocated_pages, parse_page_id, roman_to_int,
     METHOD_PAGE_LIST, METHOD_SEMANTIC, METHOD_ID_PATTERN, MIN_ID_PATTERN_MARKERS,
 )
 from core.marker_injector import MarkerInjector, PLUGIN_MARKER_ATTR
@@ -256,6 +256,63 @@ class TestExistingPageList(unittest.TestCase):
         result = ExistingMarkerDetector(container).detect()
         self.assertEqual(result.method, METHOD_SEMANTIC)
         self.assertEqual(result.markers[0].page_label, '4')
+
+    def test_front_matter_moved_to_back_is_dropped(self):
+        """Praise/ad card/copyright pages moved after the last chapter must not end the list."""
+        targets = [('Cover Page', 'ch1.xhtml')] + [(str(n), f'ch1.xhtml#x{n}') for n in (3, 5, 7, 8, 9)]
+        targets += [(str(n), f'ch1.xhtml#x{n}') for n in (2, 1, 10, 4)]
+        body = ''.join(f'<p><a id="x{n}"/>Page {n}</p>' for n in range(1, 11))
+        container, _ = make_container(
+            {'ch1.xhtml': body},
+            extra_files={'toc.ncx': self._ncx(targets)},
+            manifest_extra='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+        )
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual([m.page_label for m in result.markers],
+                         ['Cover Page', '3', '5', '7', '8', '9', '2', '1', '10'])
+
+
+class TestDropRelocatedPages(unittest.TestCase):
+
+    @staticmethod
+    def _labels(labels):
+        markers = [PageMarker('ch1.xhtml', f'a{i}', label) for i, label in enumerate(labels)]
+        return [m.page_label for m in drop_relocated_pages(markers)]
+
+    def test_ascending_pages_unchanged(self):
+        labels = [str(n) for n in range(1, 30) if n not in (12, 20)]
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_roman_then_arabic_unchanged(self):
+        labels = ['i', 'ii', 'iii', 'iv', 'v', '1', '2', '3']
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_out_of_order_pages_before_the_end_unchanged(self):
+        labels = ['iii', 'ii', '1', '2', '9', '3', '4', '10']
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_trailing_arabic_pages_dropped(self):
+        self.assertEqual(self._labels(['5', '6', '7', '8', '2', '3', '1']), ['5', '6', '7', '8'])
+
+    def test_trailing_high_pages_kept(self):
+        """Only low (front matter) numbers are trimmed, not a late part of the book."""
+        labels = ['1', '2', '411', '336', '337', '338']
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_trailing_roman_pages_dropped(self):
+        self.assertEqual(self._labels(['1', '2', '3', 'ii', 'iii', 'vi']), ['1', '2', '3'])
+
+    def test_omnibus_restart_is_kept(self):
+        labels = [str(n) for n in range(1, 31)] + [str(n) for n in range(1, 21)]
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_trailing_other_label_stops_trim(self):
+        labels = ['5', '6', '7', '2', 'Back Cover']
+        self.assertEqual(self._labels(labels), labels)
+
+    def test_roman_only_book_unchanged(self):
+        labels = ['i', 'ii', 'iii', 'iv']
+        self.assertEqual(self._labels(labels), labels)
 
 
 class TestPluginMarkersAreNotExistingMarkers(unittest.TestCase):
