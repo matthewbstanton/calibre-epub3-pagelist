@@ -22,7 +22,7 @@ Markers the plugin injected itself (see
 ``core.marker_injector.find_plugin_markers``) are never reported.
 """
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from urllib.parse import unquote
 
 from lxml import etree
@@ -51,6 +51,8 @@ _PAGE_ID_RE = re.compile(r'^(?:page|pg|p)[-_]?(?P<num>\d+|[ivxlcdm]+)$', re.IGNO
 _ROMAN_RE = re.compile(r'^m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$')
 _ROMAN_VALUES = {'i': 1, 'v': 5, 'x': 10, 'l': 50, 'c': 100, 'd': 500, 'm': 1000}
 _ID_UNSAFE_RE = re.compile(r'[^A-Za-z0-9_-]+')
+# Page 12, page 12., p. xii, pg 7 …
+_WORDY_LABEL_RE = re.compile(r'^(?:(?:page|pg|p)\.?\s*)?(?P<num>[0-9a-z]+)\.?$', re.IGNORECASE)
 
 
 @dataclass
@@ -130,6 +132,25 @@ def _label_value(label: str) -> tuple[int, bool] | None:
     return (value, True) if value is not None else None
 
 
+def number_page_labels(markers: list) -> list:
+    """
+    Keep only markers whose label is an arabic or roman page number.
+
+    Send to Kindle ignores the whole page-list if any label is not a
+    number, so ``Page 12.`` becomes ``12`` and labels such as
+    ``Cover Page`` or ``Contents`` are dropped.
+    """
+    numbered = []
+    for marker in markers:
+        label = (marker.page_label or '').strip()
+        match = _WORDY_LABEL_RE.match(label)
+        if match:
+            label = match.group('num')
+        if _label_value(label):
+            numbered.append(replace(marker, page_label=label))
+    return numbered
+
+
 def drop_relocated_pages(markers: list) -> list:
     """
     Drop the front matter pages that the ebook moved after the last page.
@@ -195,9 +216,9 @@ class ExistingMarkerDetector:
 
     def detect(self) -> DetectionResult:
         """
-        Scan the book and return the markers of the first source that has any,
-        less any pages the ebook moved out of reading order
-        (see ``drop_relocated_pages``).
+        Scan the book and return the markers of the first source that has any
+        numbered pages, less any pages the ebook moved out of reading order
+        (see ``number_page_labels`` and ``drop_relocated_pages``).
 
         Elements that are used as semantic markers but have no id are given
         one (``page-<label>``) and their document is marked dirty.
@@ -208,15 +229,15 @@ class ExistingMarkerDetector:
         self._plugin_marker_elems = [el for els in find_plugin_markers(self.container).values() for el in els]
         self.plugin_markers = {id(el) for el in self._plugin_marker_elems}
 
-        markers = self._from_existing_page_list(nav_names)
+        markers = number_page_labels(self._from_existing_page_list(nav_names))
         if markers:
             return DetectionResult(drop_relocated_pages(markers), METHOD_PAGE_LIST)
 
-        markers = self._from_semantic_markers()
+        markers = number_page_labels(self._from_semantic_markers())
         if markers:
             return DetectionResult(drop_relocated_pages(markers), METHOD_SEMANTIC)
 
-        markers = self._from_id_pattern()
+        markers = number_page_labels(self._from_id_pattern())
         if markers:
             return DetectionResult(drop_relocated_pages(markers), METHOD_ID_PATTERN)
 

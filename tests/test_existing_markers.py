@@ -14,7 +14,7 @@ from lxml import etree
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.existing_markers import (
-    ExistingMarkerDetector, PageMarker, drop_relocated_pages, parse_page_id, roman_to_int,
+    ExistingMarkerDetector, PageMarker, drop_relocated_pages, number_page_labels, parse_page_id, roman_to_int,
     METHOD_PAGE_LIST, METHOD_SEMANTIC, METHOD_ID_PATTERN, MIN_ID_PATTERN_MARKERS,
 )
 from core.marker_injector import MarkerInjector, PLUGIN_MARKER_ATTR
@@ -269,7 +269,27 @@ class TestExistingPageList(unittest.TestCase):
         )
         result = ExistingMarkerDetector(container).detect()
         self.assertEqual([m.page_label for m in result.markers],
-                         ['Cover Page', '3', '5', '7', '8', '9', '2', '1', '10'])
+                         ['3', '5', '7', '8', '9', '2', '1', '10'])
+
+    def test_only_word_labels_falls_through(self):
+        container, _ = make_container(
+            {'ch1.xhtml': '<p><a id="x1"/>One</p><p><span epub:type="pagebreak" id="pb4" title="4"/>Two</p>'},
+            extra_files={'toc.ncx': self._ncx([('Cover', 'ch1.xhtml#x1')])},
+            manifest_extra='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+        )
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual(result.method, METHOD_SEMANTIC)
+        self.assertEqual([m.page_label for m in result.markers], ['4'])
+
+
+class TestNumberPageLabels(unittest.TestCase):
+
+    def test_word_labels_dropped_and_numbers_unwrapped(self):
+        labels = ['Cover Page', 'Page iv.', 'page 5', 'p. 6', '7.', 'Contents', 'xii', 'BA4', ' 8 ']
+        markers = [PageMarker('ch1.xhtml', f'a{i}', label) for i, label in enumerate(labels)]
+        result = number_page_labels(markers)
+        self.assertEqual([m.page_label for m in result], ['iv', '5', '6', '7', 'xii', '8'])
+        self.assertEqual([m.anchor_id for m in result], ['a1', 'a2', 'a3', 'a4', 'a6', 'a8'])
 
 
 class TestDropRelocatedPages(unittest.TestCase):
