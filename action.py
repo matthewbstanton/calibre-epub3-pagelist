@@ -376,12 +376,12 @@ class EPUB3PageListAction(InterfaceAction):
                         db.new_api.set_format(book_id, 'EPUB', f)
 
                 processed_count += 1
-                saved_page_counts[book_id] = len(pages)
+                saved_page_counts[book_id] = plan.page_count
                 title = db.new_api.field_for('title', book_id)
-                if target_pages and target_pages != len(pages):
-                    page_counts.append(f'{title}: {len(pages)} pages (from {plan.origin}, target {target_pages})')
+                if target_pages and target_pages != plan.page_count:
+                    page_counts.append(f'{title}: {plan.page_count} pages (from {plan.origin}, target {target_pages})')
                 else:
-                    page_counts.append(f'{title}: {len(pages)} pages (from {plan.origin})')
+                    page_counts.append(f'{title}: {plan.page_count} pages (from {plan.origin})')
                 
             except Exception as e:
                 error_count += 1

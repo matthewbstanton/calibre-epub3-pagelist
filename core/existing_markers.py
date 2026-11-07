@@ -6,7 +6,7 @@ page-list (or have only one of the nav page-list, NCX pageList and
 page-map.xml). ``ExistingMarkerDetector`` finds those markers so the
 page-list can be built from the real print pages instead of synthetic ones.
 
-Sources, in order of preference (the first that yields markers wins):
+Sources:
 
 1. ``page-list``: an existing nav page-list, NCX pageList or page-map.xml
    whose targets resolve to elements in the spine documents.
@@ -15,8 +15,13 @@ Sources, in order of preference (the first that yields markers wins):
    or the text content.
 3. ``id-pattern``: empty ``<a>``/``<span>`` elements whose id looks like a
    page id (``page12``, ``page_12``, ``p12``, ``pg12``, ``Page_xii``…).
-   Used only when there are no semantic markers, and only if there are at
-   least ``MIN_ID_PATTERN_MARKERS`` of them and their numbers mostly ascend.
+   Used only if there are at least ``MIN_ID_PATTERN_MARKERS`` of them and
+   their numbers mostly ascend.
+
+Sources 2 and 3 are combined in reading order, because some publishers mark
+only the front and back matter semantically and the body with bare page-id
+anchors. The existing page-list is used unless those in-text markers cover
+more pages: publishers' page-lists are often partial too.
 
 Markers the plugin injected itself (see
 ``core.marker_injector.find_plugin_markers``) are never reported.
@@ -142,13 +147,42 @@ def number_page_labels(markers: list) -> list:
     """
     numbered = []
     for marker in markers:
-        label = (marker.page_label or '').strip()
-        match = _WORDY_LABEL_RE.match(label)
-        if match:
-            label = match.group('num')
-        if _label_value(label):
+        label = _page_number(marker.page_label)
+        if label:
             numbered.append(replace(marker, page_label=label))
     return numbered
+
+
+def print_page_count(labels: list) -> int | None:
+    """
+    Return the page count of a page-list with these labels, or None if none
+    of them is a page number.
+
+    Print pages don't all have markers (blank pages, unmarked front matter),
+    so the count is the number of the last page, as Kindle shows it, after
+    dropping relocated front matter (see ``drop_relocated_pages``). If the
+    page-list has more numbered entries than that, for example roman pages
+    only or an omnibus that restarts at 1, the number of entries is used.
+    """
+    markers = number_page_labels([PageMarker('', '', label) for label in labels])
+    if not markers:
+        return None
+    kept = drop_relocated_pages(markers) or markers
+    last = _label_value(kept[-1].page_label)
+    last_page = last[0] if last and not last[1] else 0
+    return max(last_page, len(markers))
+
+
+def _page_number(label: str) -> str | None:
+    """
+    Return the page number in a label such as ``Page 12.`` (``12``), or
+    None if the label is not a page number.
+    """
+    label = (label or '').strip()
+    match = _WORDY_LABEL_RE.match(label)
+    if match:
+        label = match.group('num')
+    return label if _label_value(label) else None
 
 
 def drop_relocated_pages(markers: list) -> list:
@@ -213,15 +247,17 @@ class ExistingMarkerDetector:
         self.names = []
         self._plugin_marker_elems = []
         self.plugin_markers = set()
+        self._used_ids = {}
 
     def detect(self) -> DetectionResult:
         """
-        Scan the book and return the markers of the first source that has any
-        numbered pages, less any pages the ebook moved out of reading order
-        (see ``number_page_labels`` and ``drop_relocated_pages``).
+        Scan the book and return the numbered pages of the existing page-list,
+        or of the in-text markers if those have more, less any pages the ebook
+        moved out of reading order (see ``number_page_labels`` and
+        ``drop_relocated_pages``). On a tie the page-list is used.
 
-        Elements that are used as semantic markers but have no id are given
-        one (``page-<label>``) and their document is marked dirty.
+        If the in-text markers are used, semantic markers without an id are
+        given one (``page-<label>``) and their document is marked dirty.
         """
         nav_names = self._nav_names()
         self.names = [n for n in spine_document_names(self.container) if n not in nav_names]
@@ -229,19 +265,18 @@ class ExistingMarkerDetector:
         self._plugin_marker_elems = [el for els in find_plugin_markers(self.container).values() for el in els]
         self.plugin_markers = {id(el) for el in self._plugin_marker_elems}
 
-        markers = number_page_labels(self._from_existing_page_list(nav_names))
-        if markers:
-            return DetectionResult(drop_relocated_pages(markers), METHOD_PAGE_LIST)
+        page_list = number_page_labels(self._from_existing_page_list(nav_names))
+        in_text = self._from_in_text_markers()
 
-        markers = number_page_labels(self._from_semantic_markers())
-        if markers:
-            return DetectionResult(drop_relocated_pages(markers), METHOD_SEMANTIC)
+        if page_list and len(page_list) >= len(in_text):
+            return DetectionResult(drop_relocated_pages(page_list), METHOD_PAGE_LIST)
+        if not in_text:
+            return DetectionResult()
 
-        markers = number_page_labels(self._from_id_pattern())
-        if markers:
-            return DetectionResult(drop_relocated_pages(markers), METHOD_ID_PATTERN)
-
-        return DetectionResult()
+        markers = [PageMarker(name, self._anchor_id(name, elem, label), label)
+                   for name, elem, label, _ in in_text]
+        method = METHOD_SEMANTIC if any(semantic for *_, semantic in in_text) else METHOD_ID_PATTERN
+        return DetectionResult(drop_relocated_pages(markers), method)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -379,8 +414,53 @@ class ExistingMarkerDetector:
         return PageMarker(name, fragment, label)
 
     # ------------------------------------------------------------------
-    # 2. epub:type / role page break markers
+    # 2 and 3. Markers in the text
     # ------------------------------------------------------------------
+
+    def _from_in_text_markers(self) -> list:
+        """
+        Find the semantic markers and the page-id anchors with a numbered
+        label, in reading order. Page-id anchors are dropped as a whole if
+        they fail the ``_valid_id_pattern`` checks, and one by one if their
+        page already has a semantic marker.
+
+        :return: List of (spine name, element, page label, is_semantic).
+        """
+        semantic, anchors = [], []
+        position = 0
+        for name in self.names:
+            for elem in self._body_elements(name):
+                position += 1
+                if self._is_semantic_marker(elem):
+                    label = _page_number(self._semantic_label(elem))
+                    if label:
+                        semantic.append((position, name, elem, label, True))
+                    continue
+                parsed = self._page_id_anchor(elem)
+                if parsed:
+                    anchors.append((position, name, elem, parsed))
+
+        if not self._valid_id_pattern([parsed for *_, parsed in anchors]):
+            anchors = []
+        semantic_labels = {label for _, _, _, label, _ in semantic}
+        found = semantic + [(position, name, elem, parsed[0], False)
+                            for position, name, elem, parsed in anchors if parsed[0] not in semantic_labels]
+        found.sort(key=lambda item: item[0])
+        return [item[1:] for item in found]
+
+    def _anchor_id(self, name: str, elem, label: str) -> str:
+        """
+        Return the id of a marker element, giving it one first if it has none.
+        """
+        anchor_id = elem.get('id')
+        if not anchor_id:
+            if name not in self._used_ids:
+                self._used_ids[name] = {el.get('id') for el in self._root(name).iter()
+                                        if isinstance(el.tag, str) and el.get('id')}
+            anchor_id = self._new_id(label, self._used_ids[name])
+            elem.set('id', anchor_id)
+            self.container.dirty(name)
+        return anchor_id
 
     @staticmethod
     def _is_semantic_marker(elem) -> bool:
@@ -396,27 +476,6 @@ class ExistingMarkerDetector:
         parsed = parse_page_id(elem.get('id'))
         return parsed[0] if parsed else ''
 
-    def _from_semantic_markers(self) -> list:
-        markers = []
-        for name in self.names:
-            used_ids = None
-            for elem in self._body_elements(name):
-                if not self._is_semantic_marker(elem):
-                    continue
-                label = self._semantic_label(elem)
-                if not label:
-                    continue
-                anchor_id = elem.get('id')
-                if not anchor_id:
-                    if used_ids is None:
-                        used_ids = {el.get('id') for el in self._root(name).iter()
-                                    if isinstance(el.tag, str) and el.get('id')}
-                    anchor_id = self._new_id(label, used_ids)
-                    elem.set('id', anchor_id)
-                    self.container.dirty(name)
-                markers.append(PageMarker(name, anchor_id, label))
-        return markers
-
     @staticmethod
     def _new_id(label: str, used_ids: set) -> str:
         base = 'page-' + (_ID_UNSAFE_RE.sub('-', label).strip('-') or 'break')
@@ -427,41 +486,40 @@ class ExistingMarkerDetector:
         used_ids.add(candidate)
         return candidate
 
-    # ------------------------------------------------------------------
-    # 3. Page-like ids on empty anchors
-    # ------------------------------------------------------------------
-
-    def _from_id_pattern(self) -> list:
+    @staticmethod
+    def _page_id_anchor(elem) -> tuple[str, int, bool] | None:
         """
-        Find empty ``<a>``/``<span>`` elements with page-like ids, and accept
-        them only if there are enough of them and their numbers mostly
-        ascend (arabic and roman numbers are checked separately).
-        """
-        found = []
-        for name in self.names:
-            for elem in self._body_elements(name):
-                if _localname(elem) not in ('a', 'span') or len(elem):
-                    continue
-                parsed = parse_page_id(elem.get('id'))
-                if not parsed:
-                    continue
-                label, value, is_roman = parsed
-                text = _text_of(elem)
-                # Visible page numbers are fine; anything else is not a page anchor
-                if text and text.lower() != label:
-                    continue
-                found.append((PageMarker(name, elem.get('id'), text or label), value, is_roman))
+        Parse an empty ``<a>``/``<span>`` element with a page-like id.
 
-        if len(found) < MIN_ID_PATTERN_MARKERS:
-            return []
+        :return: (label, numeric value, is_roman), or None if the element is
+            not a page-id anchor.
+        """
+        if _localname(elem) not in ('a', 'span') or len(elem):
+            return None
+        parsed = parse_page_id(elem.get('id'))
+        if not parsed:
+            return None
+        label, value, is_roman = parsed
+        text = _text_of(elem)
+        # Visible page numbers are fine; anything else is not a page anchor
+        if text and text.lower() != label:
+            return None
+        return text or label, value, is_roman
+
+    @staticmethod
+    def _valid_id_pattern(anchors: list) -> bool:
+        """
+        Accept page-id anchors, given as ``_page_id_anchor`` results in
+        reading order, only if there are enough of them and their numbers
+        mostly ascend (arabic and roman numbers are checked separately).
+        """
+        if len(anchors) < MIN_ID_PATTERN_MARKERS:
+            return False
 
         pairs = ascending = 0
         for roman in (False, True):
-            values = [value for _, value, is_roman in found if is_roman == roman]
+            values = [value for _, value, is_roman in anchors if is_roman == roman]
             for prev, cur in zip(values, values[1:]):
                 pairs += 1
                 ascending += cur > prev
-        if not pairs or ascending < MIN_ASCENDING_RATIO * pairs:
-            return []
-
-        return [marker for marker, _, _ in found]
+        return bool(pairs) and ascending >= MIN_ASCENDING_RATIO * pairs
