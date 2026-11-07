@@ -91,6 +91,23 @@ class TestPlanPages(unittest.TestCase):
         self.assertEqual(result.page_count, 10)
         self.assertEqual(source.calls, 0)
 
+    def test_book_markers_count_is_the_last_page_number(self):
+        """Unmarked print pages still count: pages 1, 2 and 5 to 9 make a 9-page book."""
+        body = ''.join(f'<p>{"Word " * 20}<span epub:type="pagebreak" id="page_{n}" title="{n}"/></p>'
+                       for n in (1, 2, 5, 6, 7, 8, 9))
+        result = plan(make_book(body=body)[0], FakeSource())
+        self.assertEqual(result.outcome, PLAN_MARKERS)
+        self.assertEqual(len(result.pages), 7)
+        self.assertEqual(result.page_count, 9)
+
+    def test_existing_page_list_count_is_the_last_page_number(self):
+        page_list = ('<nav epub:type="page-list"><ol>'
+                     + ''.join(f'<li><a href="ch1.xhtml#p{n}">{n}</a></li>' for n in (3, 5, 780, 781))
+                     + '</ol></nav>')
+        result = plan(make_book(page_list=page_list)[0], FakeSource())
+        self.assertEqual(result.outcome, PLAN_EXISTING)
+        self.assertEqual(result.page_count, 781)
+
     def test_book_markers_ignored_when_disabled(self):
         container, _ = make_book(body=retail_body(10))
         result = plan(container, FakeSource(PageCount(pages=3)), use_markers=False)

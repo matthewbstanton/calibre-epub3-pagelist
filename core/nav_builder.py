@@ -2,6 +2,8 @@ from lxml import etree
 import os
 import uuid
 
+from .existing_markers import print_page_count
+
 XHTML_NS = "http://www.w3.org/1999/xhtml"
 EPUB_OPS_NS = "http://www.idpf.org/2007/ops"
 OPF_NS = "http://www.idpf.org/2007/opf"
@@ -70,18 +72,30 @@ class NavBuilder:
 
     def existing_page_count(self) -> int | None:
         """
-        Number of pages in the book's existing page-list: the entries of the
-        nav page-list, else of the NCX pageList, else of page-map.xml.
+        Page count of the book's existing page-list: the nav page-list, else
+        the NCX pageList, else page-map.xml. It is the last page number or
+        the number of entries, whichever is higher (see ``print_page_count``).
         Returns None if none of them has any entries.
+        """
+        labels = self._existing_page_labels()
+        if not labels:
+            return None
+        return print_page_count(labels) or len(labels)
+
+    def _existing_page_labels(self) -> list:
+        """
+        Labels of the first of the nav page-list, NCX pageList and
+        page-map.xml that has any entries.
         """
         nav_name = self._find_nav_document()
         if nav_name:
             try:
                 nav_tree = self.container.parsed(nav_name)
                 ns = {'epub': EPUB_OPS_NS, 'xhtml': XHTML_NS}
-                count = len(nav_tree.xpath('//xhtml:nav[@epub:type="page-list"]//xhtml:a[@href]', namespaces=ns))
-                if count:
-                    return count
+                labels = [' '.join(''.join(a.itertext()).split()) for a in
+                          nav_tree.xpath('//xhtml:nav[@epub:type="page-list"]//xhtml:a[@href]', namespaces=ns)]
+                if labels:
+                    return labels
             except Exception:
                 pass
 
@@ -91,9 +105,13 @@ class NavBuilder:
                 ncx_name = self.container.href_to_name(ncx_items[0].get('href'), base=self.container.opf_name)
                 if self.container.has_name(ncx_name):
                     ncx_tree = self.container.parsed(ncx_name)
-                    count = len(ncx_tree.xpath('//ncx:pageList/ncx:pageTarget', namespaces={'ncx': NCX_NS}))
-                    if count:
-                        return count
+                    labels = []
+                    for target in ncx_tree.xpath('//ncx:pageList/ncx:pageTarget', namespaces={'ncx': NCX_NS}):
+                        text = target.find(f'{{{NCX_NS}}}navLabel/{{{NCX_NS}}}text')
+                        label = ' '.join(''.join(text.itertext()).split()) if text is not None else ''
+                        labels.append(label or target.get('value') or '')
+                    if labels:
+                        return labels
         except Exception:
             pass
 
@@ -103,13 +121,13 @@ class NavBuilder:
                     continue
                 pm_tree = self.container.parsed(name)
                 root = pm_tree.getroot() if hasattr(pm_tree, 'getroot') else pm_tree
-                count = sum(1 for _ in root.iter(f'{{{OPF_NS}}}page', 'page'))
-                if count:
-                    return count
+                labels = [page.get('name') or '' for page in root.iter(f'{{{OPF_NS}}}page', 'page')]
+                if labels:
+                    return labels
         except Exception:
             pass
 
-        return None
+        return []
 
     def build_page_list(self, page_breaks: list, overwrite: bool = False, synthetic: bool = True) -> None:
         """

@@ -14,7 +14,8 @@ from lxml import etree
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.existing_markers import (
-    ExistingMarkerDetector, PageMarker, drop_relocated_pages, number_page_labels, parse_page_id, roman_to_int,
+    ExistingMarkerDetector, PageMarker, drop_relocated_pages, number_page_labels, parse_page_id, print_page_count,
+    roman_to_int,
     METHOD_PAGE_LIST, METHOD_SEMANTIC, METHOD_ID_PATTERN, MIN_ID_PATTERN_MARKERS,
 )
 from core.marker_injector import MarkerInjector, PLUGIN_MARKER_ATTR
@@ -148,14 +149,33 @@ class TestSemanticMarkers(unittest.TestCase):
         })
         self.assertFalse(ExistingMarkerDetector(container).detect().found)
 
-    def test_semantic_markers_win_over_id_pattern(self):
-        ids = [f'page{n}' for n in range(1, 21)]
+    def test_semantic_markers_combined_with_id_pattern(self):
+        """Front and back matter marked semantically, the body with bare page-id anchors."""
         container, _ = make_container({
-            'ch1.xhtml': anchors(ids) + '<p><span epub:type="pagebreak" id="pb1" title="1"/></p>',
+            'front.xhtml': '<p><span role="doc-pagebreak" id="pg_1" aria-label="1"/>Title</p>',
+            'ch1.xhtml': anchors([f'page_{n}' for n in range(2, 14)]),
+            'back.xhtml': '<p><span role="doc-pagebreak" id="pg_14" aria-label="14"/>About</p>',
         })
         result = ExistingMarkerDetector(container).detect()
         self.assertEqual(result.method, METHOD_SEMANTIC)
-        self.assertEqual(len(result.markers), 1)
+        self.assertEqual([m.page_label for m in result.markers], [str(n) for n in range(1, 15)])
+        self.assertEqual((result.markers[0].anchor_id, result.markers[-1].anchor_id), ('pg_1', 'pg_14'))
+
+    def test_id_pattern_anchor_for_a_semantic_page_skipped(self):
+        container, _ = make_container({
+            'ch1.xhtml': '<p><a id="page1"/><span epub:type="pagebreak" id="pb1" title="1"/>One</p>'
+                         + anchors([f'page{n}' for n in range(2, 21)]),
+        })
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual([m.page_label for m in result.markers], [str(n) for n in range(1, 21)])
+        self.assertEqual(result.markers[0].anchor_id, 'pb1')
+
+    def test_too_few_id_pattern_anchors_not_combined(self):
+        container, _ = make_container({
+            'ch1.xhtml': '<p><span epub:type="pagebreak" id="pb1" title="1"/></p>' + anchors(['page2', 'page3']),
+        })
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual([m.page_label for m in result.markers], ['1'])
 
 
 class TestIdPatternMarkers(unittest.TestCase):
@@ -271,6 +291,37 @@ class TestExistingPageList(unittest.TestCase):
         self.assertEqual([m.page_label for m in result.markers],
                          ['3', '5', '7', '8', '9', '2', '1', '10'])
 
+    def test_partial_page_list_loses_to_fuller_in_text_markers(self):
+        """A page-list covering only the front matter must not hide the body's page anchors."""
+        body = '<p><span role="doc-pagebreak" id="pg_3" aria-label="3"/>Title</p>'
+        body += '<p><span epub:type="pagebreak" title="4"/>Copyright</p>'
+        body += anchors([f'page_{n}' for n in range(11, 31)])
+        container, trees = make_container(
+            {'ch1.xhtml': body},
+            extra_files={'toc.ncx': self._ncx([('3', 'ch1.xhtml#pg_3')])},
+            manifest_extra='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+        )
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual(result.method, METHOD_SEMANTIC)
+        self.assertEqual([m.page_label for m in result.markers], ['3', '4'] + [str(n) for n in range(11, 31)])
+        self.assertEqual(result.markers[1].anchor_id, 'page-4')
+        container.dirty.assert_called_with('ch1.xhtml')
+
+    def test_page_list_used_when_in_text_markers_are_no_fuller(self):
+        """Ids are only given to unlabelled markers when the in-text markers are used."""
+        container, trees = make_container(
+            {'ch1.xhtml': '<p><a id="x1"/><span epub:type="pagebreak" title="1"/>One</p>'
+                          '<p><a id="x2"/>Two</p>'},
+            extra_files={'toc.ncx': self._ncx([('1', 'ch1.xhtml#x1'), ('2', 'ch1.xhtml#x2')])},
+            manifest_extra='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+        )
+        result = ExistingMarkerDetector(container).detect()
+        self.assertEqual(result.method, METHOD_PAGE_LIST)
+        self.assertEqual([m.anchor_id for m in result.markers], ['x1', 'x2'])
+        span = trees['ch1.xhtml'].xpath('//x:span', namespaces={'x': XHTML_NS})[0]
+        self.assertIsNone(span.get('id'))
+        container.dirty.assert_not_called()
+
     def test_only_word_labels_falls_through(self):
         container, _ = make_container(
             {'ch1.xhtml': '<p><a id="x1"/>One</p><p><span epub:type="pagebreak" id="pb4" title="4"/>Two</p>'},
@@ -333,6 +384,24 @@ class TestDropRelocatedPages(unittest.TestCase):
     def test_roman_only_book_unchanged(self):
         labels = ['i', 'ii', 'iii', 'iv']
         self.assertEqual(self._labels(labels), labels)
+
+
+class TestPrintPageCount(unittest.TestCase):
+
+    def test_last_page_number(self):
+        self.assertEqual(print_page_count(['Cover', 'iii', '3', '5', '11', '12', '781']), 781)
+
+    def test_relocated_front_matter_not_the_count(self):
+        self.assertEqual(print_page_count(['3', '5', '779', '783', '2', '1', '781', '7', '4']), 781)
+
+    def test_more_entries_than_last_page(self):
+        omnibus = [str(n) for n in range(1, 31)] + [str(n) for n in range(1, 21)]
+        self.assertEqual(print_page_count(omnibus), 50)
+        self.assertEqual(print_page_count(['i', 'ii', 'iii']), 3)
+
+    def test_no_numbered_pages(self):
+        self.assertIsNone(print_page_count(['Cover', 'Contents']))
+        self.assertIsNone(print_page_count([]))
 
 
 class TestPluginMarkersAreNotExistingMarkers(unittest.TestCase):

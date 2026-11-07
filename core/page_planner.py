@@ -11,7 +11,7 @@ container, so the book is left unchanged.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .existing_markers import ExistingMarkerDetector
+from .existing_markers import ExistingMarkerDetector, print_page_count
 from .marker_injector import MarkerInjector
 from .nav_builder import NavBuilder
 from .page_count.base import PageCount
@@ -33,7 +33,7 @@ class PagePlan:
 
     outcome: one of the PLAN_* constants.
     pages: the PageBreak/PageMarker list for PLAN_MARKERS and PLAN_GENERATED.
-    existing_count: entries in the existing page-list, for PLAN_EXISTING (may be None).
+    existing_count: page count of the existing page-list, for PLAN_EXISTING (may be None).
     target_pages: the source's target count, if it gave one.
     source_result: the page count source's answer, if it was asked.
     source_label: the page count source's label, if it was asked.
@@ -67,7 +67,9 @@ class PagePlan:
         """
         if self.outcome == PLAN_EXISTING:
             return self.existing_count or None
-        if self.outcome in (PLAN_MARKERS, PLAN_GENERATED):
+        if self.outcome == PLAN_MARKERS:
+            return print_page_count([page.page_label for page in self.pages]) or len(self.pages) or None
+        if self.outcome == PLAN_GENERATED:
             return len(self.pages) or None
         return None
 
