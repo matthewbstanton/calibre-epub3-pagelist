@@ -237,6 +237,14 @@ class TestIdPatternMarkers(unittest.TestCase):
         container, _ = make_container({'ch1.xhtml': body})
         self.assertFalse(ExistingMarkerDetector(container).detect().found)
 
+    def test_one_anchor_per_chapter_rejected(self):
+        """Section targets p1…p18, one atop each long chapter, are not print pages."""
+        chapter = '<p>' + 'word ' * 5000 + '</p>'
+        container, _ = make_container({
+            f'c{n:02}.xml': f'<h1><a id="p{n}"/> {n}</h1>{chapter}' for n in range(1, 19)
+        })
+        self.assertFalse(ExistingMarkerDetector(container).detect().found)
+
 
 class TestExistingPageList(unittest.TestCase):
 
@@ -321,6 +329,17 @@ class TestExistingPageList(unittest.TestCase):
         span = trees['ch1.xhtml'].xpath('//x:span', namespaces={'x': XHTML_NS})[0]
         self.assertIsNone(span.get('id'))
         container.dirty.assert_not_called()
+
+    def test_page_list_with_too_few_pages_for_the_text_falls_through(self):
+        """A page-list built from one anchor per chapter must not be reused on a rerun."""
+        chapter = '<p>' + 'word ' * 5000 + '</p>'
+        docs = {f'c{n:02}.xml': f'<h1><a id="p{n}"/> {n}</h1>{chapter}' for n in range(1, 19)}
+        container, _ = make_container(
+            docs,
+            extra_files={'toc.ncx': self._ncx([(str(n), f'c{n:02}.xml#p{n}') for n in range(1, 19)])},
+            manifest_extra='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+        )
+        self.assertFalse(ExistingMarkerDetector(container).detect().found)
 
     def test_only_word_labels_falls_through(self):
         container, _ = make_container(

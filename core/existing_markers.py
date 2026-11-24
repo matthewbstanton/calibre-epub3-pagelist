@@ -23,6 +23,10 @@ only the front and back matter semantically and the body with bare page-id
 anchors. The existing page-list is used unless those in-text markers cover
 more pages: publishers' page-lists are often partial too.
 
+Either source is ignored if it gives the book far too few pages for its
+text (more than ``MAX_CHARS_PER_PAGE`` characters a page), as when one
+``p1``…``p18`` anchor per chapter file is a section target, not a page.
+
 Markers the plugin injected itself (see
 ``core.marker_injector.find_plugin_markers``) are never reported.
 """
@@ -50,6 +54,8 @@ MIN_ASCENDING_RATIO = 0.9
 MIN_RESOLVED_RATIO = 0.9
 # Longest run of out-of-order pages at the end of the book that is dropped
 MAX_RELOCATED_PAGES = 10
+# Most text a print page holds; dense textbook pages stay well under this
+MAX_CHARS_PER_PAGE = 10000
 
 # page12, page_12, page-12, pg12, p12, Page_xii, pagexii …
 _PAGE_ID_RE = re.compile(r'^(?:page|pg|p)[-_]?(?P<num>\d+|[ivxlcdm]+)$', re.IGNORECASE)
@@ -254,7 +260,9 @@ class ExistingMarkerDetector:
         Scan the book and return the numbered pages of the existing page-list,
         or of the in-text markers if those have more, less any pages the ebook
         moved out of reading order (see ``number_page_labels`` and
-        ``drop_relocated_pages``). On a tie the page-list is used.
+        ``drop_relocated_pages``). On a tie the page-list is used. Either
+        is ignored if it has too few pages for the book's text (see
+        ``_enough_pages``).
 
         If the in-text markers are used, semantic markers without an id are
         given one (``page-<label>``) and their document is marked dirty.
@@ -266,7 +274,11 @@ class ExistingMarkerDetector:
         self.plugin_markers = {id(el) for el in self._plugin_marker_elems}
 
         page_list = number_page_labels(self._from_existing_page_list(nav_names))
+        if not self._enough_pages([m.page_label for m in page_list]):
+            page_list = []
         in_text = self._from_in_text_markers()
+        if not self._enough_pages([label for _, _, label, _ in in_text]):
+            in_text = []
 
         if page_list and len(page_list) >= len(in_text):
             return DetectionResult(drop_relocated_pages(page_list), METHOD_PAGE_LIST)
@@ -305,6 +317,21 @@ class ExistingMarkerDetector:
                 if isinstance(elem.tag, str) and id(elem) not in self.plugin_markers:
                     yield elem
             return
+
+    def _enough_pages(self, labels: list) -> bool:
+        """
+        Return False if pages with these labels would each hold more than
+        ``MAX_CHARS_PER_PAGE`` characters of the spine documents' text.
+        """
+        pages = print_page_count(labels)
+        if not pages:
+            return False
+        text_length = 0
+        for name in self.names:
+            root = self._root(name)
+            if root is not None:
+                text_length += sum(len(_text_of(body)) for body in root.iter(f'{{{XHTML_NS}}}body'))
+        return text_length <= MAX_CHARS_PER_PAGE * pages
 
     def _nav_names(self) -> set:
         names = set()
